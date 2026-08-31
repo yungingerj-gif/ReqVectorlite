@@ -5,10 +5,8 @@ import { useAnalysisStore } from "../store/useAnalysisStore";
 const nav = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/review", label: "Requirement Review" },
-  { to: "/legacy", label: "Legacy Reconstruction" },
   { to: "/traceability", label: "Traceability Matrix" },
   { to: "/config", label: "Config Profiles" },
-  { to: "/ai-training", label: "AI training" },
   { to: "/domain-constraints", label: "Domain constraints" },
   { to: "/reports", label: "Reports" },
 ];
@@ -17,7 +15,6 @@ export function AppLayout() {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const profile = useAnalysisStore((s) => s.profile);
-  const setProfile = useAnalysisStore((s) => s.setProfile);
   const runUpload = useAnalysisStore((s) => s.runUpload);
   const loading = useAnalysisStore((s) => s.loading);
   const clearAnalysis = useAnalysisStore((s) => s.clearAnalysis);
@@ -27,7 +24,7 @@ export function AppLayout() {
       <aside className="lv-sidebar">
         <div className="lv-sidebar-brand">
           <span className="lv-brand-title">ReqVector</span>
-          <span className="lv-brand-sub">Layered requirements</span>
+          <span className="lv-brand-sub">Rules-only spec review</span>
         </div>
         <nav className="lv-nav">
           {nav.map((item) => (
@@ -78,9 +75,8 @@ export function AppLayout() {
             </button>
             <label className="lv-header-profile">
               Profile
-              <select value={profile} onChange={(e) => setProfile(e.target.value)}>
+              <select value={profile} disabled>
                 <option value="default_active_spec">default_active_spec</option>
-                <option value="legacy_spec">legacy_spec</option>
               </select>
             </label>
           </div>

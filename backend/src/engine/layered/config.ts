@@ -178,7 +178,7 @@ export function loadEngineConfig(filePath?: string): EngineConfig {
       ? (data.scoring_penalties as Record<string, number>)
       : {}),
   };
-  return {
+  const parsed: EngineConfig = {
     organization_id: String(data.organization_id ?? "default"),
     scoring_penalties: {
       low: Number(penalties.low ?? DEFAULT_PENALTIES.low),
@@ -215,6 +215,60 @@ export function loadEngineConfig(filePath?: string): EngineConfig {
     set_level_cross: parseSetLevelCross(data.set_level_cross),
     profiles: parseProfiles(data.profiles),
   };
+  return lockRulesOnlyEngineConfig(parsed);
+}
+
+/**
+ * ReqVectorlite: specification review is deterministic rules only (active spec).
+ * AI passes, embeddings, and legacy reconstruction cannot be turned on via config or env.
+ */
+export function lockRulesOnlyEngineConfig(config: EngineConfig): EngineConfig {
+  const registry = { ...config.rule_block_registry };
+  registry["ai.attribute_analysis"] = false;
+  registry["legacy.reconstruction"] = false;
+
+  const activeBlocks = [
+    "deterministic.unambiguous",
+    "deterministic.complete",
+    "deterministic.verifiable",
+    "deterministic.singular",
+    "deterministic.consistent_correct",
+    "setLevel.cross_requirement",
+    "contradiction.intra_document",
+    "contradiction.parent_child",
+  ];
+
+  const defaultActive = config.profiles.default_active_spec;
+  const profiles: Record<string, EngineProfile> = {
+    default_active_spec: {
+      id: "default_active_spec",
+      mode: "active",
+      enabled_rule_blocks: defaultActive
+        ? defaultActive.enabled_rule_blocks.filter(
+            (id) => id !== "legacy.reconstruction" && id !== "ai.attribute_analysis"
+          )
+        : activeBlocks,
+      ai_attribute_analysis: false,
+      ai_legacy_augment: false,
+      scoring_weights_override: defaultActive?.scoring_weights_override ?? {},
+    },
+  };
+
+  return {
+    ...config,
+    rule_block_registry: registry,
+    contradiction: {
+      ...config.contradiction,
+      ai_intra_enabled: false,
+      ai_hierarchy_enabled: false,
+      embedding_enabled: false,
+    },
+    set_level_cross: {
+      ...config.set_level_cross,
+      ai_same_intent_enabled: false,
+    },
+    profiles,
+  };
 }
 
 function readStringArray(v: unknown): string[] {
@@ -228,20 +282,13 @@ function readSynonymGroups(v: unknown): string[][] {
     .map((g) => (g as unknown[]).map(String));
 }
 
-/** Per-request override: turn on LLM same-intent pass without editing layered-engine.json. */
-export function withSameIntentLlmEnabled(config: EngineConfig, enabled: boolean): EngineConfig {
-  if (!enabled) return config;
-  return {
-    ...config,
-    set_level_cross: {
-      ...config.set_level_cross,
-      ai_same_intent_enabled: true,
-    },
-  };
+/** Kept for API compatibility; LLM same-intent cannot be enabled in this build. */
+export function withSameIntentLlmEnabled(config: EngineConfig, _enabled: boolean): EngineConfig {
+  return lockRulesOnlyEngineConfig(config);
 }
 
 export function resolveProfile(config: EngineConfig, profileId: string): EngineProfile {
-  const p = config.profiles[profileId];
+  const p = config.profiles[profileId] ?? config.profiles.default_active_spec;
   if (!p) {
     const keys = Object.keys(config.profiles);
     throw new Error(`Unknown profile "${profileId}". Known: ${keys.join(", ")}`);

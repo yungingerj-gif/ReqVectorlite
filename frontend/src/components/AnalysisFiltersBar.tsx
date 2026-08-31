@@ -26,7 +26,6 @@ export function AnalysisFiltersBar({ title = "Filters" }: Props) {
           <select value={filters.profile} onChange={(e) => setFilters({ profile: e.target.value })}>
             <option value="all">All (match current run)</option>
             <option value="default_active_spec">default_active_spec</option>
-            <option value="legacy_spec">legacy_spec</option>
           </select>
         </label>
         <label>

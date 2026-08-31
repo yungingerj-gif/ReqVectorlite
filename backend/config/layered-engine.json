@@ -19,7 +19,7 @@
     "deterministic.singular": true,
     "deterministic.consistent_correct": true,
     "ai.attribute_analysis": false,
-    "legacy.reconstruction": true,
+    "legacy.reconstruction": false,
     "setLevel.cross_requirement": true,
     "contradiction.intra_document": true,
     "contradiction.parent_child": true
@@ -107,24 +107,6 @@
         "deterministic.verifiable",
         "deterministic.singular",
         "deterministic.consistent_correct",
-        "setLevel.cross_requirement",
-        "contradiction.intra_document",
-        "contradiction.parent_child"
-      ],
-      "ai_attribute_analysis": false,
-      "ai_legacy_augment": false,
-      "scoring_weights_override": {}
-    },
-    "legacy_spec": {
-      "id": "legacy_spec",
-      "mode": "legacy",
-      "enabled_rule_blocks": [
-        "deterministic.unambiguous",
-        "deterministic.complete",
-        "deterministic.verifiable",
-        "deterministic.singular",
-        "deterministic.consistent_correct",
-        "legacy.reconstruction",
         "setLevel.cross_requirement",
         "contradiction.intra_document",
         "contradiction.parent_child"

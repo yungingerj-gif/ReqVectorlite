@@ -1,20 +1,23 @@
 /**
- * Layered requirements engine — HTTP API.
+ * Layered requirements engine — HTTP API (normalize → deterministic rules → scoring).
+ * AI and legacy reconstruction are not available in this build.
+ *
+ * Endpoints (prefix `/api` when mounted):
+ * - `GET /layered/health` — engine identity and layer checklist.
+ * - `GET /layered/config` — read-only engine configuration for dashboards.
+ * - `GET|POST /layered/domain-constraints` — quantity/unit hints for deterministic checks.
+ * - `POST /layered/analyze` — JSON body with `rawText`, profile, optional parent doc and trace links.
+ * - `POST /layered/analyze-upload` — multipart `file` (+ optional `parent_file`) with form fields.
+ * - `POST /layered/export/analysis-docx` — Word report from a prior `LayeredAnalysisResult`.
+ * - `POST /layered/export/revised-source` — apply text replacements to an uploaded source file.
+ *
+ * @module routes/layeredPlatform
  */
 import express from "express";
 import multer from "multer";
 import { z } from "zod";
 import { validateBody } from "../middleware/validate";
 import { loadEngineConfig, runLayeredEngine } from "../engine/layered/engine";
-import { withSameIntentLlmEnabled } from "../engine/layered/config";
-import {
-  getAiOrganizationContextForEngine,
-  loadAiTrainingPack,
-  saveAiTrainingPack,
-  steeringTrainingJsonlFromPack,
-  type AiTrainingPack,
-  type AiTrainingExample,
-} from "../engine/layered/aiTrainingPack";
 import {
   loadDomainConstraintLibrary,
   saveDomainConstraintLibrary,
@@ -42,23 +45,6 @@ const parseOptionsSchema = z
 const traceLinkSchema = z.object({
   parent_requirement_id: z.string().min(1),
   child_requirement_id: z.string().min(1),
-});
-
-const trainingPackPostSchema = z.object({
-  global_llm_instructions: z.string().max(8000).optional(),
-  examples: z
-    .array(
-      z.object({
-        id: z.string().max(120).optional(),
-        layout_label: z.string().max(200).optional(),
-        layout_notes: z.string().max(8000).optional(),
-        excerpt: z.string().max(6000).optional(),
-        guidance_for_llm: z.string().max(4000).optional(),
-        enabled: z.boolean().optional(),
-      })
-    )
-    .max(40)
-    .optional(),
 });
 
 const domainConstraintsPostSchema = z.object({
@@ -91,7 +77,7 @@ const analyzeSchema = z.object({
   /** Display label for the parent document (e.g. filename) when using inline parent_raw_text. */
   parent_source_document: z.string().optional(),
   trace_links: z.array(traceLinkSchema).max(2000).optional(),
-  /** When true, runs the optional LLM batch that flags same-intent requirement pairs (needs OPENAI_API_KEY on server). */
+  /** Ignored. This build does not run LLM passes. */
   same_intent_llm: z.boolean().optional(),
 });
 
@@ -134,6 +120,7 @@ const upload = multer({
   },
 });
 
+/** `GET /api/layered/health` — lightweight probe listing engine layers and supported profiles. */
 router.get("/layered/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -141,13 +128,14 @@ router.get("/layered/health", (_req, res) => {
     layers: [
       "L0_normalize",
       "L1_deterministic",
-      "L2_ai_optional",
       "L3_scoring",
       "L5_set_level",
       "L6_contradiction",
       "L7_config",
     ],
-    profiles: ["default_active_spec", "legacy_spec"],
+    profiles: ["default_active_spec"],
+    ai_enablement: false,
+    review_mode: "active_spec_rules_only",
   });
 });
 
@@ -161,56 +149,7 @@ router.get("/layered/config", (_req, res) => {
   }
 });
 
-/** Organization AI context pack for layered LLMs — stored under backend/data/. See GET/POST /layered/ai-training-pack. */
-router.get("/layered/ai-training-pack", (_req, res) => {
-  try {
-    res.json(loadAiTrainingPack());
-  } catch {
-    res.status(500).json({ message: "Failed to load AI training pack" });
-  }
-});
-
-/** Auto-generated SFT JSONL from the steering pack (same bytes as `data/ai-training-steering.jsonl` after save). */
-router.get("/layered/ai-training-steering.jsonl", (_req, res) => {
-  try {
-    const pack = loadAiTrainingPack();
-    const body = steeringTrainingJsonlFromPack(pack);
-    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
-    res.setHeader("Content-Disposition", 'attachment; filename="ai-training-steering.jsonl"');
-    res.send(body);
-  } catch {
-    res.status(500).json({ message: "Failed to build steering training JSONL" });
-  }
-});
-
-router.post("/layered/ai-training-pack", validateBody(trainingPackPostSchema), (req, res, next) => {
-  try {
-    const body = req.body as z.infer<typeof trainingPackPostSchema>;
-    const rawExamples = body.examples ?? [];
-    const examples: AiTrainingExample[] = rawExamples.map((e) => {
-      const ex: AiTrainingExample = {
-        id: e.id?.trim() ?? "",
-        layout_label: (e.layout_label ?? "Topic").trim() || "Topic",
-        layout_notes: e.layout_notes ?? "",
-        excerpt: e.excerpt ?? "",
-        enabled: e.enabled ?? true,
-      };
-      const g = e.guidance_for_llm?.trim();
-      if (g) ex.guidance_for_llm = g;
-      return ex;
-    });
-    const pack: AiTrainingPack = {
-      updated_at: "",
-      global_llm_instructions: body.global_llm_instructions ?? "",
-      examples,
-    };
-    saveAiTrainingPack(pack);
-    res.json(loadAiTrainingPack());
-  } catch (e) {
-    next(e);
-  }
-});
-
+/** `GET /api/layered/domain-constraints` — loads quantity/domain constraint library used by layered checks. */
 router.get("/layered/domain-constraints", (_req, res) => {
   try {
     res.json(loadDomainConstraintLibrary());
@@ -219,6 +158,7 @@ router.get("/layered/domain-constraints", (_req, res) => {
   }
 });
 
+/** `POST /api/layered/domain-constraints` — replaces library contents after validation and persistence. */
 router.post("/layered/domain-constraints", validateBody(domainConstraintsPostSchema), (req, res, next) => {
   try {
     const body = req.body as z.infer<typeof domainConstraintsPostSchema>;
@@ -250,17 +190,17 @@ router.post("/layered/domain-constraints", validateBody(domainConstraintsPostSch
   }
 });
 
+/** `POST /api/layered/analyze` — runs {@link runLayeredEngine} on inline text with optional parent/trace metadata. */
 router.post("/layered/analyze", validateBody(analyzeSchema), async (req, res, next) => {
   try {
     const body = req.body as z.infer<typeof analyzeSchema>;
-    const config = withSameIntentLlmEnabled(loadEngineConfig(), body.same_intent_llm === true);
-    const ai_organization_context = getAiOrganizationContextForEngine();
+    const config = loadEngineConfig();
     const result = await runLayeredEngine(
       {
         rawText: body.rawText,
         source_document: body.sourceDocument ?? "inline-text",
-        profile: body.profile,
-        mode: body.mode,
+        profile: "default_active_spec",
+        mode: "active",
         parseOptions: body.options ?? {},
         ...(body.parent_raw_text?.trim()
           ? { parent_raw_text: body.parent_raw_text.trim() }
@@ -269,7 +209,6 @@ router.post("/layered/analyze", validateBody(analyzeSchema), async (req, res, ne
           ? { parent_source_document: body.parent_source_document.trim() }
           : {}),
         ...(body.trace_links && body.trace_links.length > 0 ? { trace_links: body.trace_links } : {}),
-        ...(ai_organization_context ? { ai_organization_context } : {}),
       },
       config
     );
@@ -279,6 +218,9 @@ router.post("/layered/analyze", validateBody(analyzeSchema), async (req, res, ne
   }
 });
 
+/**
+ * `POST /api/layered/analyze-upload` — multipart primary `file` plus optional `parent_file` and string fields (`profile`, `mode`, `trace_links` JSON, etc.).
+ */
 router.post(
   "/layered/analyze-upload",
   upload.fields([
@@ -294,12 +236,8 @@ router.post(
       return;
     }
 
-    const profile =
-      typeof req.body?.profile === "string" && req.body.profile.length > 0
-        ? req.body.profile
-        : "default_active_spec";
-    const mode =
-      req.body?.mode === "legacy" ? "legacy" : ("active" as const);
+    const profile = "default_active_spec";
+    const mode = "active" as const;
 
     const { text, source_document } = await extractTextForLayered({
       buffer: file.buffer,
@@ -312,11 +250,7 @@ router.post(
       return;
     }
 
-    const sameIntentLlm =
-      req.body?.same_intent_llm === true ||
-      req.body?.same_intent_llm === "true" ||
-      req.body?.same_intent_llm === "1";
-    const config = withSameIntentLlmEnabled(loadEngineConfig(), sameIntentLlm);
+    const config = loadEngineConfig();
     const parentMulter = files?.parent_file?.[0];
     let parentRaw: string | undefined;
     let parent_source_document: string | undefined;
@@ -364,8 +298,6 @@ router.post(
       }
     }
 
-    const ai_organization_context = getAiOrganizationContextForEngine();
-
     const result = await runLayeredEngine(
       {
         rawText: text,
@@ -376,7 +308,6 @@ router.post(
         ...(parentRaw ? { parent_raw_text: parentRaw } : {}),
         ...(parent_source_document ? { parent_source_document } : {}),
         ...(trace_links && trace_links.length > 0 ? { trace_links } : {}),
-        ...(ai_organization_context ? { ai_organization_context } : {}),
       },
       config
     );
@@ -394,6 +325,7 @@ router.post(
   }
 });
 
+/** `POST /api/layered/export/analysis-docx` — accepts `{ result }` JSON and streams a `.docx` report buffer. */
 router.post("/layered/export/analysis-docx", validateBody(exportSchema), async (req, res, next) => {
   try {
     const body = req.body as z.infer<typeof exportSchema>;

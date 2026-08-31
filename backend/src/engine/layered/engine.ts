@@ -1,8 +1,8 @@
-import { createAiClientFromEnv, wrapAiClientWithOrganizationContext, type AiClient } from "./ai/aiClient";
-import { runAiAttributeAnalysis } from "./ai/attributeScoring";
+import { NullAiClient, type AiClient } from "./ai/aiClient";
 import {
   isBlockEnabled,
   loadEngineConfig,
+  lockRulesOnlyEngineConfig,
   resolveProfile,
   type EngineConfig,
 } from "./config";
@@ -14,7 +14,6 @@ import {
   runVerifiable,
 } from "./deterministic";
 import type { DeterministicContext } from "./deterministic/ruleContext";
-import { augmentLegacyWithAi, reconstructLegacyHeuristic } from "./legacyReconstruction";
 import {
   normalizeParentRequirementsForHierarchy,
   normalizeToCanonicalRequirements,
@@ -22,16 +21,12 @@ import {
 import { scoreRequirements } from "./scoring";
 import { runIntraDocumentContradictions } from "./contradiction/runIntraDocument";
 import { runParentChildContradictions } from "./contradiction/runParentChild";
-import { dedupeSoftCrossPairs, runSetLevelCrossRequirement } from "./setLevel/crossConsistency";
-import { runCrossSameIntentAi } from "./setLevel/crossIntentAi";
-import { buildSemanticEmbeddingContext, type SemanticEmbeddingContext } from "./embedding/semanticLayer";
+import { runSetLevelCrossRequirement } from "./setLevel/crossConsistency";
 import type {
   CanonicalRequirement,
   EngineRunOptions,
   LayeredAnalysisResult,
-  LegacyReconstructionResult,
   PerRequirementResult,
-  SemanticEmbeddingMeta,
   StructuredFinding,
 } from "./types";
 
@@ -51,17 +46,18 @@ export async function runLayeredEngine(
   config: EngineConfig,
   aiClient?: AiClient
 ): Promise<LayeredAnalysisResult> {
-  const profile = resolveProfile(config, options.profile);
-  const baseClient = aiClient ?? createAiClientFromEnv();
-  const client = wrapAiClientWithOrganizationContext(baseClient, options.ai_organization_context);
+  const locked = lockRulesOnlyEngineConfig(config);
+  const profile = resolveProfile(locked, options.profile);
+  void aiClient;
+  const client = new NullAiClient();
 
   const requirements = normalizeToCanonicalRequirements(
     options.rawText,
-    config,
+    locked,
     options.parseOptions
   );
 
-  const ctx: DeterministicContext = { config, allRequirements: requirements };
+  const ctx: DeterministicContext = { config: locked, allRequirements: requirements };
   const perReq = new Map<string, StructuredFinding[]>();
   for (const r of requirements) {
     perReq.set(r.id, []);
@@ -70,102 +66,34 @@ export async function runLayeredEngine(
   for (const r of requirements) {
     const bucket = perReq.get(r.id)!;
     for (const { blockId, run } of DETERMINISTIC) {
-      if (!isBlockEnabled(config, profile, blockId)) continue;
+      if (!isBlockEnabled(locked, profile, blockId)) continue;
       bucket.push(...run(r, ctx));
     }
   }
 
-  const aiAttributeOn =
-    profile.ai_attribute_analysis && isBlockEnabled(config, profile, "ai.attribute_analysis");
-
-  if (aiAttributeOn) {
-    for (const r of requirements) {
-      const bucket = perReq.get(r.id)!;
-      const extra = await runAiAttributeAnalysis(r, [...bucket], client);
-      bucket.push(...extra);
-    }
-  }
-
-  const legacyBlockOn = isBlockEnabled(config, profile, "legacy.reconstruction");
-  const runLegacy = options.mode === "legacy" && legacyBlockOn;
-  const legacyById = new Map<string, LegacyReconstructionResult>();
-
-  if (runLegacy) {
-    for (const r of requirements) {
-      let leg = reconstructLegacyHeuristic(r, perReq.get(r.id) ?? []);
-      if (profile.ai_legacy_augment) {
-        leg = await augmentLegacyWithAi(leg, r, client);
-      }
-      legacyById.set(r.id, leg);
-    }
-  }
-
   let setLevel: StructuredFinding[] = [];
-  if (isBlockEnabled(config, profile, "setLevel.cross_requirement")) {
-    setLevel = runSetLevelCrossRequirement(requirements, config);
-    if (config.set_level_cross.ai_same_intent_enabled) {
-      const intentFindings = await runCrossSameIntentAi(requirements, config, client);
-      setLevel = dedupeSoftCrossPairs([...setLevel, ...intentFindings]);
-    }
+  if (isBlockEnabled(locked, profile, "setLevel.cross_requirement")) {
+    setLevel = runSetLevelCrossRequirement(requirements, locked);
   }
 
-  const intraOn = isBlockEnabled(config, profile, "contradiction.intra_document");
+  const intraOn = isBlockEnabled(locked, profile, "contradiction.intra_document");
   const parentText = options.parent_raw_text?.trim() ?? "";
   const parentReqs =
     parentText.length > 0
-      ? normalizeParentRequirementsForHierarchy(parentText, config, options.parseOptions)
+      ? normalizeParentRequirementsForHierarchy(parentText, locked, options.parseOptions)
       : [];
   const parentSourceLabel =
     options.parent_source_document?.trim() ||
     (parentReqs.length > 0 ? "Parent specification" : undefined);
   const hierarchyOn =
-    parentReqs.length > 0 && isBlockEnabled(config, profile, "contradiction.parent_child");
-
-  let semanticCtx: SemanticEmbeddingContext | null = null;
-  let semanticEmbeddingMeta: SemanticEmbeddingMeta | undefined;
-
-  if (config.contradiction.embedding_enabled) {
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!intraOn && !hierarchyOn) {
-      semanticEmbeddingMeta = {
-        enabled: false,
-        skipped_reason: "contradiction_passes_disabled",
-      };
-    } else if (!apiKey || apiKey.length < 8) {
-      semanticEmbeddingMeta = {
-        enabled: false,
-        skipped_reason: "OPENAI_API_KEY not set",
-      };
-    } else {
-      semanticCtx = await buildSemanticEmbeddingContext(requirements, parentReqs, config.contradiction);
-      if (semanticCtx) {
-        semanticEmbeddingMeta = {
-          enabled: true,
-          model: semanticCtx.model,
-          dimensions: semanticCtx.dimensions,
-          cluster_count: new Set(semanticCtx.clusterByRequirementId.values()).size,
-          neighbor_pair_count: semanticCtx.neighborPairKeys.size,
-          intra_prefilter_applied: intraOn && semanticCtx.neighborPairKeys.size > 0,
-          hierarchy_embedding_boost:
-            hierarchyOn &&
-            parentReqs.length > 0 &&
-            config.contradiction.embedding_hierarchy_match,
-        };
-      } else {
-        semanticEmbeddingMeta = {
-          enabled: false,
-          skipped_reason: "embedding_request_failed",
-        };
-      }
-    }
-  }
+    parentReqs.length > 0 && isBlockEnabled(locked, profile, "contradiction.parent_child");
 
   let intraPairsExamined = 0;
   let hierarchyPairsExamined = 0;
   const contradictionFindings: StructuredFinding[] = [];
 
   if (intraOn) {
-    const intra = await runIntraDocumentContradictions(requirements, config, profile, client, semanticCtx);
+    const intra = await runIntraDocumentContradictions(requirements, locked, profile, client, null);
     contradictionFindings.push(...intra.findings);
     intraPairsExamined = intra.pairsExamined;
   }
@@ -175,10 +103,10 @@ export async function runLayeredEngine(
       parentReqs,
       requirements,
       options.trace_links,
-      config,
+      locked,
       profile,
       client,
-      semanticCtx
+      null
     );
     contradictionFindings.push(...hier.findings);
     hierarchyPairsExamined = hier.pairsExamined;
@@ -186,7 +114,7 @@ export async function runLayeredEngine(
 
   setLevel = [...setLevel, ...contradictionFindings];
 
-  const scoreMap = scoreRequirements(requirements, perReq, setLevel, config, profile);
+  const scoreMap = scoreRequirements(requirements, perReq, setLevel, locked, profile);
 
   const requirementsOut = requirements.map((r) => {
     const row: PerRequirementResult = {
@@ -194,29 +122,19 @@ export async function runLayeredEngine(
       findings: perReq.get(r.id) ?? [],
       scores: scoreMap.get(r.id)!,
     };
-    const leg = legacyById.get(r.id);
-    if (leg !== undefined) {
-      row.legacy = leg;
-    }
-    if (semanticCtx) {
-      const cid = semanticCtx.clusterByRequirementId.get(r.id);
-      if (cid !== undefined) {
-        row.semantic = { cluster_id: cid, embedding_model: semanticCtx.model };
-      }
-    }
     return row;
   });
 
   return {
     meta: {
       profile: profile.id,
-      mode: options.mode,
+      mode: "active",
       analyzed_at: new Date().toISOString(),
       requirement_count: requirements.length,
       source_document: options.source_document,
       ...(parentSourceLabel ? { parent_source_document: parentSourceLabel } : {}),
-      ai_enabled: aiAttributeOn,
-      organization_id: config.organization_id,
+      ai_enabled: false,
+      organization_id: locked.organization_id,
       contradiction: {
         intra_enabled: intraOn,
         hierarchy_enabled: hierarchyOn,
@@ -224,7 +142,6 @@ export async function runLayeredEngine(
         hierarchy_pairs_examined: hierarchyPairsExamined,
         ...(parentReqs.length > 0 ? { parent_requirement_count: parentReqs.length } : {}),
       },
-      ...(semanticEmbeddingMeta ? { semantic_embedding: semanticEmbeddingMeta } : {}),
     },
     requirements: requirementsOut,
     set_level_findings: setLevel,

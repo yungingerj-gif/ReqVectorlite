@@ -46,7 +46,7 @@ interface AnalysisState {
    */
   parentChildCompareEnabled: boolean;
   /**
-   * When true, analysis requests include LLM same-intent detection for cross-requirement pairs (server needs OPENAI_API_KEY).
+   * Unused: this branch never sends LLM same-intent requests.
    */
   sameIntentLlmEnabled: boolean;
   hierarchyChildFile: File | null;
@@ -246,13 +246,10 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   runAnalyze: async () => {
     const {
       rawText,
-      profile,
-      mode,
       sourceDocument,
       parentChildCompareEnabled,
       hierarchyChildFile,
       hierarchyParentFile,
-      sameIntentLlmEnabled,
     } = get();
 
     if (parentChildCompareEnabled) {
@@ -265,9 +262,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         const fd = new FormData();
         fd.append("file", hierarchyChildFile, hierarchyChildFile.name);
         fd.append("parent_file", hierarchyParentFile, hierarchyParentFile.name);
-        fd.append("profile", profile);
-        fd.append("mode", mode);
-        fd.append("same_intent_llm", sameIntentLlmEnabled ? "true" : "false");
+        fd.append("profile", "default_active_spec");
+        fd.append("mode", "active");
         const analysisResult = await layeredApi.analyzeLayeredUpload(fd);
         set({
           analysisResult,
@@ -302,10 +298,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     try {
       const analysisResult = await layeredApi.analyzeLayered({
         rawText: text,
-        profile,
-        mode,
+        profile: "default_active_spec",
+        mode: "active",
         sourceDocument: sourceDocument.trim() || "Pasted requirements",
-        ...(sameIntentLlmEnabled ? { same_intent_llm: true } : {}),
       });
       set({
         analysisResult,
@@ -330,7 +325,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   runUpload: async (file: File) => {
-    const { profile, mode, parentChildCompareEnabled, sameIntentLlmEnabled } = get();
+    const { parentChildCompareEnabled } = get();
     if (parentChildCompareEnabled) {
       set({
         error: "Parent/child mode is on — use the Child and Parent upload areas, then Run analysis.",
@@ -339,9 +334,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     }
     const fd = new FormData();
     fd.append("file", file, file.name);
-    fd.append("profile", profile);
-    fd.append("mode", mode);
-    fd.append("same_intent_llm", sameIntentLlmEnabled ? "true" : "false");
+    fd.append("profile", "default_active_spec");
+    fd.append("mode", "active");
     set({ loading: true, error: null });
     try {
       const analysisResult = await layeredApi.analyzeLayeredUpload(fd);

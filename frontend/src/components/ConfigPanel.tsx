@@ -9,12 +9,12 @@ const BLOCK_LABELS: Record<string, string> = {
   "deterministic.verifiable": "Verifiable",
   "deterministic.singular": "Singular",
   "deterministic.consistent_correct": "Consistent",
-  "ai.attribute_analysis": "AI analysis",
-  "legacy.reconstruction": "Legacy reconstruction",
   "setLevel.cross_requirement": "Set-level / cross-requirement",
   "contradiction.intra_document": "Intra-document contradiction",
   "contradiction.parent_child": "Parent–child contradiction",
 };
+
+const DISABLED_BLOCKS = new Set(["ai.attribute_analysis", "legacy.reconstruction"]);
 
 function loadOverride(): Record<string, unknown> {
   try {
@@ -146,20 +146,15 @@ export function ConfigPanel() {
       <h2 className="lv-h2">Configurable profiles</h2>
       <p className="lv-muted">
         Edit rule blocks, weights, and dictionaries. Changes are stored locally and do not change the running server
-        configuration.
-      </p>
-      <p className="lv-muted">
-        <strong>Semantic embeddings</strong> (requirement vectors, functional clustering, contradiction pre-filter) are
-        controlled on the server in <code className="lv-code-inline">backend/config/layered-engine.json</code> under{" "}
-        <code className="lv-code-inline">contradiction.embedding_*</code>. Set{" "}
-        <code className="lv-code-inline">embedding_enabled: true</code> and provide{" "}
-        <code className="lv-code-inline">OPENAI_API_KEY</code> on the backend process.
+        configuration. AI and legacy reconstruction blocks cannot be enabled on this branch.
       </p>
 
       <div className="lv-config-section">
         <h3 className="lv-h3">Rule blocks</h3>
         <div className="lv-toggle-grid">
-          {registryKeys.map((key) => (
+          {registryKeys
+            .filter((key) => !DISABLED_BLOCKS.has(key))
+            .map((key) => (
             <label key={key} className="lv-toggle">
               <input type="checkbox" checked={Boolean(reg[key])} onChange={(e) => setReg(key, e.target.checked)} />
               <span>{BLOCK_LABELS[key] ?? key}</span>

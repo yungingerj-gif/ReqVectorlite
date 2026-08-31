@@ -3,11 +3,9 @@ import { AppLayout } from "./components/AppLayout";
 import { PlaceholderPage } from "./components/PlaceholderPage";
 import { ConfigPage } from "./pages/Config";
 import { DashboardPage } from "./pages/Dashboard";
-import { LegacyPage } from "./pages/Legacy";
 import { ReportsPage } from "./pages/Reports";
 import { ReviewPage } from "./pages/Review";
 import { RequirementsTool } from "./ui/RequirementsTool";
-import { AiTrainingPage } from "./pages/AiTraining";
 import { DomainConstraintsPage } from "./pages/DomainConstraints";
 
 export function App() {
@@ -19,7 +17,7 @@ export function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/review" element={<ReviewPage />} />
-            <Route path="/legacy" element={<LegacyPage />} />
+            <Route path="/legacy" element={<Navigate to="/review" replace />} />
             <Route
               path="/traceability"
               element={
@@ -30,7 +28,7 @@ export function App() {
               }
             />
             <Route path="/config" element={<ConfigPage />} />
-            <Route path="/ai-training" element={<AiTrainingPage />} />
+            <Route path="/ai-training" element={<Navigate to="/review" replace />} />
             <Route path="/domain-constraints" element={<DomainConstraintsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
           </Route>

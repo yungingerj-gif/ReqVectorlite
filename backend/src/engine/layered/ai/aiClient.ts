@@ -90,17 +90,10 @@ export class RemoteAiClient implements AiClient {
 }
 
 /**
- * Prefer remote AI gateway when AI_SERVICE_URL is set; else direct OpenAI; else null client.
+ * ReqVectorlite never constructs a live LLM client from environment variables.
  */
 export function createAiClientFromEnv(): AiClient {
-  const remote = process.env.AI_SERVICE_URL?.trim();
-  if (remote && /^https?:\/\//i.test(remote)) {
-    const secret = process.env.AI_SERVICE_SECRET?.trim();
-    return new RemoteAiClient(remote, secret || undefined);
-  }
-  const key = process.env.OPENAI_API_KEY;
-  if (!key || key.length < 8) return new NullAiClient();
-  return new OpenAiJsonClient(key);
+  return new NullAiClient();
 }
 
 /**

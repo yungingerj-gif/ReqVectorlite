@@ -75,12 +75,6 @@ export function UploadPanel() {
   const hierarchyParentFile = useAnalysisStore((s) => s.hierarchyParentFile);
   const setHierarchyChildFile = useAnalysisStore((s) => s.setHierarchyChildFile);
   const setHierarchyParentFile = useAnalysisStore((s) => s.setHierarchyParentFile);
-  const mode = useAnalysisStore((s) => s.mode);
-  const setMode = useAnalysisStore((s) => s.setMode);
-  const profile = useAnalysisStore((s) => s.profile);
-  const setProfile = useAnalysisStore((s) => s.setProfile);
-  const sameIntentLlmEnabled = useAnalysisStore((s) => s.sameIntentLlmEnabled);
-  const setSameIntentLlmEnabled = useAnalysisStore((s) => s.setSameIntentLlmEnabled);
   const runAnalyze = useAnalysisStore((s) => s.runAnalyze);
   const runUpload = useAnalysisStore((s) => s.runUpload);
   const loading = useAnalysisStore((s) => s.loading);
@@ -192,38 +186,11 @@ export function UploadPanel() {
         </>
       )}
 
-      <div className="lv-row">
-        <label className="lv-field">
-          Mode
-          <select value={mode} onChange={(e) => setMode(e.target.value as "active" | "legacy")}>
-            <option value="active">Active Spec Mode</option>
-            <option value="legacy">Legacy Reconstruction Mode</option>
-          </select>
-        </label>
-        <label className="lv-field">
-          Profile
-          <select value={profile} onChange={(e) => setProfile(e.target.value)}>
-            <option value="default_active_spec">default_active_spec</option>
-            <option value="legacy_spec">legacy_spec</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="lv-row lv-llm-option">
-        <label className="lv-checkbox-label">
-          <input
-            type="checkbox"
-            checked={sameIntentLlmEnabled}
-            onChange={(e) => setSameIntentLlmEnabled(e.target.checked)}
-            disabled={loading}
-          />
-          <span>
-            <strong>LLM same-intent check</strong> — ask the model which requirement pairs state the same
-            obligation (adds <code className="lv-code-inline">same_intent_llm</code> findings). The server must
-            have OPENAI_API_KEY set on the server; otherwise this has no effect.
-          </span>
-        </label>
-      </div>
+      <p className="lv-hint">
+        Analysis uses deterministic INCOSE-style rules only (clarity, completeness, verifiability, singularity,
+        consistency, plus set-level and parent/child contradiction checks). AI and legacy reconstruction are not
+        available on this branch.
+      </p>
 
       <button
         type="button"

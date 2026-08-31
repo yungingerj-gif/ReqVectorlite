@@ -1,13 +1,10 @@
 import { findingSeverityClass, scoreBadgeClass } from "../store/analysisUtils";
 import { useAnalysisStore } from "../store/useAnalysisStore";
-import { LegacyPanel } from "./LegacyPanel";
 import { RewritePanel } from "./RewritePanel";
-import { SuggestionFeedbackBar } from "./SuggestionFeedbackBar";
 
 export function RequirementDetail() {
   const analysisResult = useAnalysisStore((s) => s.analysisResult);
   const selectedRequirementId = useAnalysisStore((s) => s.selectedRequirementId);
-  const mode = useAnalysisStore((s) => s.mode);
 
   const row = analysisResult?.requirements.find((r) => r.requirement.id === selectedRequirementId);
 
@@ -27,8 +24,7 @@ export function RequirementDetail() {
     );
   }
 
-  const { requirement: r, scores, findings, legacy } = row;
-  const showLegacyPanel = mode === "legacy" && Boolean(legacy);
+  const { requirement: r, scores, findings } = row;
   const childDoc = analysisResult.meta.source_document?.trim();
   const parentDoc = analysisResult.meta.parent_source_document?.trim();
 
@@ -111,20 +107,13 @@ export function RequirementDetail() {
                   <em>Suggested rewrite</em>
                 </div>
                 <blockquote className="lv-finding-rewrite-quote">{f.suggested_rewrite}</blockquote>
-                <SuggestionFeedbackBar
-                  requirementId={r.id}
-                  sourceKey={`finding-${f.finding_id}`}
-                  originalSuggestion={f.suggested_rewrite}
-                  compact
-                />
               </div>
             )}
           </li>
         ))}
       </ul>
 
-      <RewritePanel requirementId={r.id} findings={findings} legacy={legacy} />
-      {showLegacyPanel && legacy ? <LegacyPanel legacy={legacy} visible /> : null}
+      <RewritePanel requirementId={r.id} findings={findings} />
     </section>
   );
 }
