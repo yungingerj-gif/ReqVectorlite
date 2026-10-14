@@ -12,7 +12,29 @@ export interface CanonicalRequirement {
   action?: string;
   object?: string;
   conditions?: string[];
+  parameters?: Array<{
+    parameter: string;
+    operator: "<" | "<=" | ">" | ">=" | "=";
+    value: number;
+    unit?: string;
+    evidence_span?: string;
+  }>;
   thresholds?: Array<{ value: string; unit?: string; comparator?: string }>;
+  semantics?: {
+    actor?: string;
+    action?: string;
+    object?: string;
+    conditions: string[];
+    parameters: Array<{
+      parameter: string;
+      operator: "<" | "<=" | ">" | ">=" | "=";
+      value: number;
+      unit?: string;
+      evidence_span?: string;
+    }>;
+    obligation?: string;
+    polarity?: string;
+  };
   tags?: string[];
 }
 

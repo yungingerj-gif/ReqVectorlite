@@ -1,4 +1,5 @@
-import type { CanonicalRequirement, ThresholdSpec } from "../types";
+import type { CanonicalRequirement, RequirementParameter, ThresholdSpec } from "../types";
+import { parseRequirementSemanticFrame } from "../semanticParse";
 
 /** Polarity / modality cues for cross-requirement comparison. */
 export type PolarityModality =
@@ -15,10 +16,11 @@ export interface ParsedThreshold {
   unit?: string;
   comparator?: string;
   raw: string;
+  parameter?: string;
 }
 
 /**
- * Reusable semantic representation for pairwise comparison (intra-doc and hierarchy).
+ * Pairwise comparison view of the L0 semantic frame (plus polarities used by contradiction rules).
  */
 export interface RequirementSemantics {
   requirement_id: string;
@@ -30,6 +32,17 @@ export interface RequirementSemantics {
   polarities: PolarityModality[];
   /** Short free-text cue for matching (action + object heuristics). */
   function_signature: string;
+}
+
+function parameterToParsed(p: RequirementParameter): ParsedThreshold {
+  const pt: ParsedThreshold = {
+    numericValue: p.value,
+    comparator: p.operator,
+    raw: `${p.parameter} ${p.operator} ${p.value}${p.unit ? ` ${p.unit}` : ""}`.trim(),
+    parameter: p.parameter,
+  };
+  if (p.unit) pt.unit = p.unit.toLowerCase();
+  return pt;
 }
 
 function parseThresholdSpec(t: ThresholdSpec, fallbackText: string): ParsedThreshold | null {
@@ -44,17 +57,19 @@ function parseThresholdSpec(t: ThresholdSpec, fallbackText: string): ParsedThres
   return pt;
 }
 
-function inferPolarities(text: string): PolarityModality[] {
+function polaritiesFromFrame(
+  polarity: "required" | "prohibited" | "allowed" | "unknown",
+  text: string
+): PolarityModality[] {
   const t = text.toLowerCase();
   const out: PolarityModality[] = [];
-  const negObl = /\bshall\s+not\b|\bmust\s+not\b|\bprohibited\b|\bnever\s+shall\b|\bno\s+longer\b/.test(t);
-  if (negObl) {
+  if (polarity === "prohibited" || /\bshall\s+not\b|\bmust\s+not\b|\bprohibited\b/.test(t)) {
     out.push("prohibited", "negative");
   }
-  if (!negObl && /\bshall\b|\bmust\b/.test(t)) {
+  if (polarity === "required" || (!out.includes("prohibited") && /\bshall\b|\bmust\b/.test(t))) {
     out.push("required");
   }
-  if (/\bshould\b|\bmay\b|\bmight\b|\bcould\b/.test(t)) {
+  if (polarity === "allowed" || /\bshould\b|\bmay\b|\bmight\b|\bcould\b/.test(t)) {
     out.push("weak_obligation", "allowed");
   }
   if (/\bonly\b|\bexclusively\b|\balways\b|\bnever\b/.test(t)) {
@@ -62,15 +77,6 @@ function inferPolarities(text: string): PolarityModality[] {
   }
   if (out.length === 0) out.push("unknown");
   return [...new Set(out)];
-}
-
-function guessObject(text: string, action?: string): string | undefined {
-  const afterShall = text.match(/\b(?:shall|must|should|may)\s+(.{3,120}?)(?:\.|;|$)/i);
-  const chunk = afterShall?.[1]?.trim() ?? text.slice(0, 120);
-  if (action && chunk.toLowerCase().startsWith(action.toLowerCase().slice(0, 8))) {
-    return chunk.slice(action.length).trim().slice(0, 200) || undefined;
-  }
-  return chunk.slice(0, 200) || undefined;
 }
 
 function functionSignature(
@@ -87,26 +93,37 @@ function functionSignature(
   return parts.join("|").toLowerCase().replace(/\s+/g, " ");
 }
 
+/**
+ * Projects the L0 semantic frame for pairwise engines.
+ * Does not re-parse the sentence when `req.semantics` is already present.
+ */
 export function extractRequirementSemantics(req: CanonicalRequirement): RequirementSemantics {
-  const text = req.normalized_text;
-  const thresholds: ParsedThreshold[] = [];
-  if (req.thresholds) {
+  const frame = req.semantics ?? parseRequirementSemanticFrame(req.normalized_text);
+  const fromParams = (req.parameters ?? frame.parameters).map(parameterToParsed);
+  let thresholds = fromParams;
+  if (thresholds.length === 0 && req.thresholds) {
+    thresholds = [];
     for (const th of req.thresholds) {
-      const p = parseThresholdSpec(th, text);
+      const p = parseThresholdSpec(th, req.normalized_text);
       if (p) thresholds.push(p);
     }
   }
-  const polarities = inferPolarities(text);
-  const object = guessObject(text, req.action);
+
+  const polarities = polaritiesFromFrame(frame.polarity, req.normalized_text);
+  const actor = frame.actor ?? req.actor;
+  const action = frame.action ?? req.action;
+  const object = frame.object ?? req.object;
+  const conditions = frame.conditions.length > 0 ? frame.conditions : (req.conditions ?? []);
+
   const sem: RequirementSemantics = {
     requirement_id: req.id,
-    conditions: req.conditions ?? [],
+    conditions,
     thresholds,
     polarities,
     function_signature: "",
   };
-  if (req.actor !== undefined) sem.actor = req.actor;
-  if (req.action !== undefined) sem.action = req.action;
+  if (actor !== undefined) sem.actor = actor;
+  if (action !== undefined) sem.action = action;
   if (object !== undefined) sem.object = object;
   const sigPartial: { actor?: string; action?: string; object?: string; conditions: string[] } = {
     conditions: sem.conditions,

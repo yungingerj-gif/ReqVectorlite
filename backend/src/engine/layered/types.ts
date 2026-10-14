@@ -12,6 +12,34 @@ export type CanonicalRequirementType =
   | "General"
   | "Unknown";
 
+export type ComparisonOperator = "<" | "<=" | ">" | ">=" | "=";
+
+/** First-class measurable claim produced by the L0 semantic parser. */
+export interface RequirementParameter {
+  parameter: string;
+  operator: ComparisonOperator;
+  value: number;
+  unit?: string;
+  evidence_span?: string;
+}
+
+export type ObligationVerb = "shall" | "must" | "should" | "may" | "could" | "might";
+
+/**
+ * Single semantic frame for a requirement. Built once at normalize time; rules should
+ * read this instead of re-parsing `normalized_text`.
+ */
+export interface RequirementSemanticFrame {
+  actor?: string;
+  action?: string;
+  object?: string;
+  conditions: string[];
+  parameters: RequirementParameter[];
+  obligation?: ObligationVerb;
+  polarity: "required" | "prohibited" | "allowed" | "unknown";
+}
+
+/** @deprecated Prefer RequirementParameter. Kept for older findings/tests. */
 export interface ThresholdSpec {
   value: string;
   unit?: string;
@@ -26,11 +54,17 @@ export interface CanonicalRequirement {
 
   type: CanonicalRequirementType;
 
+  /** Parsed once in normalizeCanonical. Absent only on hand-built test fixtures. */
+  semantics?: RequirementSemanticFrame;
+
   actor?: string;
   action?: string;
   object?: string;
   conditions?: string[];
+  /** Derived from `semantics.parameters` when normalized. */
   thresholds?: ThresholdSpec[];
+  /** Same objects as `semantics.parameters` (first-class parameters). */
+  parameters?: RequirementParameter[];
 
   tags?: string[];
   custom_attributes?: Record<string, unknown>;

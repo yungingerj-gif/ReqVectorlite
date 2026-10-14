@@ -36,7 +36,10 @@ export function reconstructLegacyHeuristic(
       : "[action: derive from context — not explicit in source]";
   const actorPart = req.actor ?? "The system";
   let perfPart = "";
-  if (hasAnyDigit(src) && req.thresholds && req.thresholds.length > 0) {
+  const params = req.parameters ?? req.semantics?.parameters ?? [];
+  if (hasAnyDigit(src) && params.length > 0) {
+    perfPart = ` with ${params.map((p) => `${p.parameter} ${p.operator} ${p.value}${p.unit ? ` ${p.unit}` : ""}`).join(", ")}`;
+  } else if (hasAnyDigit(src) && req.thresholds && req.thresholds.length > 0) {
     perfPart = ` with ${req.thresholds.map((t) => `${t.comparator ?? ""} ${t.value} ${t.unit ?? ""}`.trim()).join(", ")}`;
   } else if (req.type === "Performance" && !hasAnyDigit(src)) {
     perfPart = ` [${NO_TIMING}]`;

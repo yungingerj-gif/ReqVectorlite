@@ -17,9 +17,17 @@ function opposingModality(a: RequirementSemantics, b: RequirementSemantics): boo
   return (aReq && bProh) || (bReq && aProh);
 }
 
-type NumericConflictResult =
-  | { hit: false }
-  | { hit: true; detail: string; kind: "bound_conflict" | "value_mismatch" };
+function boundKind(comparator?: string, raw?: string): "upper" | "lower" | "equal" | "unknown" {
+  const s = `${comparator ?? ""} ${raw ?? ""}`.toLowerCase();
+  if (s.includes(">=")) return "lower";
+  if (s.includes("<=")) return "upper";
+  if (/(?:^|\s)>(?!=)/.test(s) || /\bgreater than\b|\bmore than\b|\bexceed/.test(s)) return "lower";
+  if (/(?:^|\s)<(?!=)/.test(s) || /\bless than\b|\bbelow\b/.test(s)) return "upper";
+  if (/\bmin(?:imum)?\b|\bat least\b|\bno less/.test(s)) return "lower";
+  if (/\bmax(?:imum)?\b|\bat most\b|\bno more|\bnot exceed/.test(s)) return "upper";
+  if (s.includes("=")) return "equal";
+  return "unknown";
+}
 
 function numericConflict(a: RequirementSemantics, b: RequirementSemantics): NumericConflictResult {
   if (!sameActorForIntraContradictionPair(a, b)) {
@@ -29,36 +37,38 @@ function numericConflict(a: RequirementSemantics, b: RequirementSemantics): Nume
   for (const ta of a.thresholds) {
     for (const tb of b.thresholds) {
       if (!ta.unit || !tb.unit || ta.unit !== tb.unit) continue;
-      const ca = ta.comparator ?? "";
-      const cb = tb.comparator ?? "";
+      if (ta.parameter && tb.parameter && ta.parameter !== tb.parameter) continue;
       const va = ta.numericValue;
       const vb = tb.numericValue;
       if (Number.isNaN(va) || Number.isNaN(vb)) continue;
 
-      const aUpper = /max|less|at most|no more|<=|</i.test(ca + ta.raw);
-      const bLower = /min|greater|at least|no less|>=|>/i.test(cb + tb.raw);
-      const aLower = /min|greater|at least|no less|>=|>/i.test(ca + ta.raw);
-      const bUpper = /max|less|at most|no more|<=|</i.test(cb + tb.raw);
+      const aKind = boundKind(ta.comparator, ta.raw);
+      const bKind = boundKind(tb.comparator, tb.raw);
 
-      if (aUpper && bLower && va < vb) {
+      if (aKind === "upper" && bKind === "lower" && va < vb) {
         return {
           hit: true,
           kind: "bound_conflict",
-          detail: `Conflicting bounds for the same actor on ${ta.unit}: one caps at ${va}, another requires at least ${vb}.`,
+          detail: `Conflicting bounds for the same actor on ${ta.parameter ?? ta.unit}: one caps at ${va}, another requires at least ${vb}.`,
         };
       }
-      if (aLower && bUpper && va > vb) {
+      if (aKind === "lower" && bKind === "upper" && va > vb) {
         return {
           hit: true,
           kind: "bound_conflict",
-          detail: `Conflicting bounds for the same actor on ${ta.unit}: one requires at least ${va}, another caps at ${vb}.`,
+          detail: `Conflicting bounds for the same actor on ${ta.parameter ?? ta.unit}: one requires at least ${va}, another caps at ${vb}.`,
         };
       }
-      if (Math.abs(va - vb) > 1e-6 && ca === cb && ca.length > 0 && va !== vb) {
+      if (
+        Math.abs(va - vb) > 1e-6 &&
+        aKind === bKind &&
+        aKind !== "unknown" &&
+        (ta.parameter == null || tb.parameter == null || ta.parameter === tb.parameter)
+      ) {
         return {
           hit: true,
           kind: "value_mismatch",
-          detail: `Same actor and comparator family but different numeric values (${va} vs ${vb}) in ${ta.unit}.`,
+          detail: `Same actor and bound direction but different numeric values (${va} vs ${vb}) in ${ta.unit}.`,
         };
       }
     }

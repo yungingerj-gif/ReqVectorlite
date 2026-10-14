@@ -4,25 +4,20 @@ import type { DeterministicContext } from "./ruleContext";
 
 export const BLOCK_ID = "deterministic.complete";
 
-function hasObligation(text: string): boolean {
-  return /\b(shall|must)\b/i.test(text);
+function hasObligation(req: CanonicalRequirement): boolean {
+  const v = req.semantics?.obligation;
+  if (v === "shall" || v === "must") return true;
+  if (req.semantics?.polarity === "required") return true;
+  return /\b(shall|must)\b/i.test(req.normalized_text);
 }
 
-/** Actor cue words; (?!-) avoids counting hyphenated adjectives (e.g. system-level, user-defined) as the responsible entity. */
-const ACTOR_CUE_RE =
-  /\b(system|software|hardware|controller|operator|user|vehicle|module|subsystem|interface|component)\b(?!-)/i;
-
-/** Text before the first normative verb — avoids treating words in trailing phrases (e.g. "reverse vehicle operation") as the obligation subject. */
-function subjectSpanBeforeFirstObligation(text: string): string {
-  const m = text.match(/^([\s\S]*?)\b(shall|must)\b/i);
-  const prefix = m?.[1] ?? text;
-  return prefix.trim();
+function hasActor(req: CanonicalRequirement): boolean {
+  const actor = req.semantics?.actor ?? req.actor;
+  return Boolean(actor && actor.length > 0);
 }
 
-function hasActorish(text: string, actor?: string): boolean {
-  if (actor && actor.length > 0) return true;
-  const subjectSpan = subjectSpanBeforeFirstObligation(text);
-  return ACTOR_CUE_RE.test(subjectSpan);
+function parametersOf(req: CanonicalRequirement) {
+  return req.parameters ?? req.semantics?.parameters ?? [];
 }
 
 export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext): StructuredFinding[] {
@@ -46,7 +41,7 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (!hasObligation(text)) {
+  if (!hasObligation(req)) {
     findings.push(
       createFinding({
         requirement_id: req.id,
@@ -63,7 +58,7 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (!hasActorish(text, req.actor)) {
+  if (!hasActor(req)) {
     findings.push(
       createFinding({
         requirement_id: req.id,
@@ -79,11 +74,7 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (
-    req.type === "Performance" &&
-    (!req.thresholds || req.thresholds.length === 0) &&
-    !/\d/.test(text)
-  ) {
+  if (req.type === "Performance" && parametersOf(req).length === 0 && !/\d/.test(text)) {
     findings.push(
       createFinding({
         requirement_id: req.id,
@@ -93,7 +84,7 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
         confidence: 0.86,
         issue_type: "performance_without_metric",
         explanation:
-          "Performance-type requirement has no measurable value or extracted threshold in the text.",
+          "Performance-type requirement has no measurable value or extracted parameter in the text.",
         missing_fields: ["measurable_threshold", "unit"],
       })
     );
@@ -120,7 +111,8 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (hasObligation(text) && (!req.action || req.action.length < 3)) {
+  const action = req.semantics?.action ?? req.action;
+  if (hasObligation(req) && (!action || action.length < 3)) {
     findings.push(
       createFinding({
         requirement_id: req.id,

@@ -4,16 +4,19 @@ import type { DeterministicContext } from "./ruleContext";
 
 export const BLOCK_ID = "deterministic.verifiable";
 
-const UNIT_REGEX =
-  /\b\d+(?:\.\d+)?\s*(ms|s|sec|seconds|min|%|mm|cm|m|bar|psi|hz|khz|mhz|v|a|w)\b/i;
+function parametersOf(req: CanonicalRequirement) {
+  return req.parameters ?? req.semantics?.parameters ?? [];
+}
 
 export function runVerifiable(req: CanonicalRequirement, _ctx: DeterministicContext): StructuredFinding[] {
   const findings: StructuredFinding[] = [];
   const text = req.normalized_text;
-  const hasObligation = /\b(shall|must)\b/i.test(text);
+  const params = parametersOf(req);
+  const obligation = req.semantics?.obligation;
+  const hasObligation = obligation === "shall" || obligation === "must" || /\b(shall|must)\b/i.test(text);
   const qualitativeOnly =
     /\b(user-friendly|intuitive|easy|robust|reliable|appropriate|efficient)\b/i.test(text) &&
-    !UNIT_REGEX.test(text) &&
+    params.length === 0 &&
     !/\d/.test(text);
 
   if (!hasObligation) {
@@ -33,7 +36,7 @@ export function runVerifiable(req: CanonicalRequirement, _ctx: DeterministicCont
     return findings;
   }
 
-  if (req.type === "Performance" && (!req.thresholds || req.thresholds.length === 0)) {
+  if (req.type === "Performance" && params.length === 0) {
     findings.push(
       createFinding({
         requirement_id: req.id,
@@ -64,7 +67,7 @@ export function runVerifiable(req: CanonicalRequirement, _ctx: DeterministicCont
     );
   }
 
-  if (/\d/.test(text) && !UNIT_REGEX.test(text) && req.type === "Performance") {
+  if (req.type === "Performance" && params.some((p) => p.unit == null || p.unit.length === 0)) {
     findings.push(
       createFinding({
         requirement_id: req.id,

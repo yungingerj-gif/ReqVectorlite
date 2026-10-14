@@ -60,6 +60,22 @@ export function RequirementDetail() {
         <blockquote className="lv-source-quote">{r.source_text}</blockquote>
       </div>
 
+      {(r.parameters ?? r.semantics?.parameters ?? []).length > 0 && (
+        <>
+          <h3 className="lv-h3">Parameters</h3>
+          <ul className="lv-finding-list">
+            {(r.parameters ?? r.semantics?.parameters ?? []).map((p, i) => (
+              <li key={`${p.parameter}-${p.operator}-${p.value}-${i}`} className="lv-finding">
+                <code>
+                  {p.parameter} {p.operator} {p.value}
+                  {p.unit ? ` ${p.unit}` : ""}
+                </code>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       <h3 className="lv-h3">Attribute scores</h3>
       <div className="lv-score-grid">
         {(

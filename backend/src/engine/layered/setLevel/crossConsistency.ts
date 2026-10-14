@@ -252,16 +252,15 @@ type NumericClaim = {
 
 function extractNumericClaims(reqs: CanonicalRequirement[]): NumericClaim[] {
   const claims: NumericClaim[] = [];
-  const pattern =
-    /\b(maximum|max|min|minimum|timeout|latency|response)\s+([a-z][a-z0-9 _-]{2,40}?)\s+(\d+(?:\.\d+)?)\s*(ms|s|sec|seconds|min|%|hz)\b/gi;
   for (const r of reqs) {
-    for (const m of r.normalized_text.matchAll(pattern)) {
-      const key = `${String(m[1]).toLowerCase()} ${String(m[2]).toLowerCase()}`;
+    const params = r.parameters ?? r.semantics?.parameters ?? [];
+    for (const p of params) {
+      if (!p.unit) continue;
       claims.push({
         requirementId: r.id,
-        key,
-        value: Number(m[3]),
-        unit: String(m[4]).toLowerCase(),
+        key: `${p.parameter} ${p.unit}`.toLowerCase(),
+        value: p.value,
+        unit: p.unit.toLowerCase(),
       });
     }
   }
