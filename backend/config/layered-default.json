@@ -5,8 +5,7 @@
     "deterministic.complete": true,
     "deterministic.verifiable": true,
     "deterministic.singular": true,
-    "deterministic.cross_consistency": true,
-    "stub.ai_attribute_scoring": false
+    "deterministic.cross_consistency": true
   },
   "thresholds": {
     "ambiguity_term_count_for_fail": 1,
@@ -35,8 +34,7 @@
         "deterministic.complete",
         "deterministic.verifiable",
         "deterministic.singular",
-        "deterministic.cross_consistency",
-        "stub.ai_attribute_scoring"
+        "deterministic.cross_consistency"
       ]
     },
     "legacy_spec": {

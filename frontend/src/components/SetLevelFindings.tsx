@@ -50,7 +50,7 @@ function findingIntentHint(issueType: string): string | null {
     duplicate_requirement:
       "Same substantive text appears under more than one requirement ID.",
     same_intent_llm:
-      "LLM judged these two requirements as stating the same obligation or outcome (not just similar words). Review for redundancy or merge.",
+      "These two requirements state the same obligation or outcome (not just similar words). Review for redundancy or merge.",
     conflicting_absolute_statements:
       "Single requirement mixes strong prohibition with enabling language — review that one statement.",
     possible_missing_decomposition:
@@ -64,7 +64,7 @@ function findingIntentHint(issueType: string): string | null {
   };
   if (hints[issueType] != null) return hints[issueType]!;
   if (issueType.startsWith("intra.ai.")) {
-    return "LLM review of a candidate pair — read the explanation; result may be overlap, refinement, or contradiction.";
+    return "Review of a candidate pair — read the explanation; result may be overlap, refinement, or contradiction.";
   }
   if (issueType.startsWith("hierarchy.")) {
     return "Parent vs child document check — see explanation (refinement, relaxation, missing trace, etc.).";

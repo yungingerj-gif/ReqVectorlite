@@ -16,13 +16,13 @@
     "deterministic.unambiguous": true,
     "deterministic.complete": true,
     "deterministic.verifiable": true,
+    "verification.analysis": true,
     "deterministic.singular": true,
     "deterministic.consistent_correct": true,
-    "ai.attribute_analysis": false,
     "legacy.reconstruction": false,
     "setLevel.cross_requirement": true,
     "contradiction.intra_document": true,
-    "contradiction.parent_child": true
+    "contradiction.parent_child": false
   },
   "thresholds": {
     "min_text_length_for_complete": 8,
@@ -36,13 +36,7 @@
     "overlap_max_pairs": 15,
     "terminology_drift_content_jaccard_floor": 0.42,
     "terminology_drift_min_shared_content_tokens": 4,
-    "cross_semantic_alignment_floor": 0.1,
-    "same_intent_ai_lexical_floor": 0.28,
-    "same_intent_ai_max_candidates": 64
-  },
-  "set_level_cross": {
-    "ai_same_intent_enabled": false,
-    "ai_same_intent_max_pairs": 24
+    "cross_semantic_alignment_floor": 0.1
   },
   "dictionaries": {
     "banned_terms": [],
@@ -84,18 +78,7 @@
     "shared_object_weight": 0.18,
     "shared_condition_bonus": 0.2,
     "hierarchy_similarity_floor": 0.1,
-    "hierarchy_pair_budget": 80,
-    "ai_intra_enabled": false,
-    "ai_hierarchy_enabled": false,
-    "intra_ai_max_pairs": 10,
-    "hierarchy_ai_max_pairs": 12,
-    "embedding_enabled": false,
-    "embedding_model": "text-embedding-3-small",
-    "embedding_neighbor_top_k": 16,
-    "embedding_neighbor_min_cosine": 0.38,
-    "embedding_cluster_min_cosine": 0.62,
-    "embedding_hierarchy_match": true,
-    "embedding_hierarchy_min_cosine": 0.28
+    "hierarchy_pair_budget": 80
   },
   "profiles": {
     "default_active_spec": {
@@ -105,14 +88,12 @@
         "deterministic.unambiguous",
         "deterministic.complete",
         "deterministic.verifiable",
+        "verification.analysis",
         "deterministic.singular",
         "deterministic.consistent_correct",
         "setLevel.cross_requirement",
-        "contradiction.intra_document",
-        "contradiction.parent_child"
+        "contradiction.intra_document"
       ],
-      "ai_attribute_analysis": false,
-      "ai_legacy_augment": false,
       "scoring_weights_override": {}
     }
   }

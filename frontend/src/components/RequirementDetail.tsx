@@ -60,21 +60,96 @@ export function RequirementDetail() {
         <blockquote className="lv-source-quote">{r.source_text}</blockquote>
       </div>
 
-      {(r.parameters ?? r.semantics?.parameters ?? []).length > 0 && (
-        <>
-          <h3 className="lv-h3">Parameters</h3>
-          <ul className="lv-finding-list">
-            {(r.parameters ?? r.semantics?.parameters ?? []).map((p, i) => (
-              <li key={`${p.parameter}-${p.operator}-${p.value}-${i}`} className="lv-finding">
-                <code>
-                  {p.parameter} {p.operator} {p.value}
-                  {p.unit ? ` ${p.unit}` : ""}
-                </code>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      {(() => {
+        const actor = r.actor ?? r.semantics?.actor;
+        const obligation = r.obligation ?? r.semantics?.obligation;
+        const polarity = r.polarity ?? r.semantics?.polarity;
+        const action = r.action ?? r.semantics?.action;
+        const object = r.object ?? r.semantics?.object;
+        const conditions = r.conditions ?? r.semantics?.conditions ?? [];
+        const modes = r.modes ?? r.semantics?.modes ?? [];
+        const states = r.states ?? r.semantics?.states ?? [];
+        const parameters = r.parameters ?? r.semantics?.parameters ?? [];
+        const signals = r.verification_signals ?? r.semantics?.verification_signals ?? [];
+        const hasFrame =
+          Boolean(actor || obligation || polarity || action || object) ||
+          conditions.length + modes.length + states.length + parameters.length + signals.length > 0;
+        if (!hasFrame) return null;
+        return (
+          <>
+            <h3 className="lv-h3">Semantic frame</h3>
+            <div className="lv-detail-basic">
+              {actor && (
+                <p>
+                  <strong>Actor</strong> {actor}
+                </p>
+              )}
+              {obligation && (
+                <p>
+                  <strong>Obligation</strong> {obligation}
+                </p>
+              )}
+              {polarity && (
+                <p>
+                  <strong>Polarity</strong> {polarity}
+                </p>
+              )}
+              {action && (
+                <p>
+                  <strong>Action</strong> {action}
+                </p>
+              )}
+              {object && (
+                <p>
+                  <strong>Object</strong> {object}
+                </p>
+              )}
+              {conditions.length > 0 && (
+                <p>
+                  <strong>Conditions</strong> {conditions.join("; ")}
+                </p>
+              )}
+              {modes.length > 0 && (
+                <p>
+                  <strong>Modes</strong> {modes.join(", ")}
+                </p>
+              )}
+              {states.length > 0 && (
+                <p>
+                  <strong>States</strong> {states.join(", ")}
+                </p>
+              )}
+            </div>
+            {parameters.length > 0 && (
+              <>
+                <h3 className="lv-h3">Parameters</h3>
+                <ul className="lv-finding-list">
+                  {parameters.map((p, i) => (
+                    <li key={`${p.parameter}-${p.operator}-${p.value}-${i}`} className="lv-finding">
+                      <code>
+                        {p.parameter} {p.operator} {p.value}
+                        {p.unit ? ` ${p.unit}` : ""}
+                      </code>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {signals.length > 0 && (
+              <>
+                <h3 className="lv-h3">Verification signals</h3>
+                <ul className="lv-finding-list">
+                  {signals.map((s, i) => (
+                    <li key={`${s.kind}-${s.name}-${i}`} className="lv-finding">
+                      <span className="lv-finding-attr">{s.kind}</span> {s.name}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       <h3 className="lv-h3">Attribute scores</h3>
       <div className="lv-score-grid">

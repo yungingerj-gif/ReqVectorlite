@@ -9,9 +9,13 @@ export interface CanonicalRequirement {
   explicit_id: boolean;
   type: string;
   actor?: string;
+  obligation?: string;
+  polarity?: string;
   action?: string;
   object?: string;
   conditions?: string[];
+  modes?: string[];
+  states?: string[];
   parameters?: Array<{
     parameter: string;
     operator: "<" | "<=" | ">" | ">=" | "=";
@@ -19,12 +23,21 @@ export interface CanonicalRequirement {
     unit?: string;
     evidence_span?: string;
   }>;
+  verification_signals?: Array<{
+    kind: string;
+    name: string;
+    evidence_span?: string;
+  }>;
   thresholds?: Array<{ value: string; unit?: string; comparator?: string }>;
   semantics?: {
     actor?: string;
+    obligation?: string;
+    polarity?: string;
     action?: string;
     object?: string;
     conditions: string[];
+    modes: string[];
+    states: string[];
     parameters: Array<{
       parameter: string;
       operator: "<" | "<=" | ">" | ">=" | "=";
@@ -32,8 +45,11 @@ export interface CanonicalRequirement {
       unit?: string;
       evidence_span?: string;
     }>;
-    obligation?: string;
-    polarity?: string;
+    verification_signals: Array<{
+      kind: string;
+      name: string;
+      evidence_span?: string;
+    }>;
   };
   tags?: string[];
 }
@@ -80,19 +96,6 @@ export interface PerRequirementResult {
   findings: StructuredFinding[];
   scores: RequirementScores;
   legacy?: LegacyReconstructionResult;
-  /** Semantic embedding cluster (backend `embedding_enabled` + successful API call). */
-  semantic?: { cluster_id: number; embedding_model?: string };
-}
-
-export interface SemanticEmbeddingMeta {
-  enabled: boolean;
-  skipped_reason?: string;
-  model?: string;
-  dimensions?: number;
-  cluster_count?: number;
-  neighbor_pair_count?: number;
-  intra_prefilter_applied?: boolean;
-  hierarchy_embedding_boost?: boolean;
 }
 
 export interface LayeredContradictionMeta {
@@ -113,10 +116,8 @@ export interface LayeredAnalysisResult {
     requirement_count: number;
     source_document?: string;
     parent_source_document?: string;
-    ai_enabled: boolean;
     organization_id?: string;
     contradiction?: LayeredContradictionMeta;
-    semantic_embedding?: SemanticEmbeddingMeta;
   };
   requirements: PerRequirementResult[];
   set_level_findings: StructuredFinding[];

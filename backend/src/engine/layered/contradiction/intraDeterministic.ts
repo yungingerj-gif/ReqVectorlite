@@ -29,6 +29,10 @@ function boundKind(comparator?: string, raw?: string): "upper" | "lower" | "equa
   return "unknown";
 }
 
+type NumericConflictResult =
+  | { hit: false }
+  | { hit: true; kind: "bound_conflict" | "value_mismatch"; detail: string };
+
 function numericConflict(a: RequirementSemantics, b: RequirementSemantics): NumericConflictResult {
   if (!sameActorForIntraContradictionPair(a, b)) {
     return { hit: false };

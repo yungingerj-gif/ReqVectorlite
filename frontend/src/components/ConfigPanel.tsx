@@ -6,7 +6,8 @@ const OVERRIDE_KEY = "layered-config-override-v1";
 const BLOCK_LABELS: Record<string, string> = {
   "deterministic.unambiguous": "Unambiguous",
   "deterministic.complete": "Complete",
-  "deterministic.verifiable": "Verifiable",
+  "deterministic.verifiable": "Verifiable (legacy id)",
+  "verification.analysis": "Verification analysis",
   "deterministic.singular": "Singular",
   "deterministic.consistent_correct": "Consistent",
   "setLevel.cross_requirement": "Set-level / cross-requirement",
@@ -14,7 +15,7 @@ const BLOCK_LABELS: Record<string, string> = {
   "contradiction.parent_child": "Parent–child contradiction",
 };
 
-const DISABLED_BLOCKS = new Set(["ai.attribute_analysis", "legacy.reconstruction"]);
+const DISABLED_BLOCKS = new Set(["legacy.reconstruction", "contradiction.parent_child", "ai.attribute_analysis"]);
 
 function loadOverride(): Record<string, unknown> {
   try {
@@ -36,6 +37,7 @@ function mergeServerWithOverride(server: Record<string, unknown>): Record<string
     ...((server.rule_block_registry as Record<string, boolean>) || {}),
     ...((o.rule_block_registry as Record<string, boolean>) || {}),
   };
+  delete reg["ai.attribute_analysis"];
   const weights = {
     ...((server.scoring_weights as Record<string, number>) || {}),
     ...((o.scoring_weights as Record<string, number>) || {}),
@@ -146,7 +148,7 @@ export function ConfigPanel() {
       <h2 className="lv-h2">Configurable profiles</h2>
       <p className="lv-muted">
         Edit rule blocks, weights, and dictionaries. Changes are stored locally and do not change the running server
-        configuration. AI and legacy reconstruction blocks cannot be enabled on this branch.
+        configuration.
       </p>
 
       <div className="lv-config-section">

@@ -13,10 +13,6 @@ const testContradictionCfg: ContradictionConfig = {
   shared_condition_bonus: 0.2,
   hierarchy_similarity_floor: 0.1,
   hierarchy_pair_budget: 80,
-  ai_intra_enabled: false,
-  ai_hierarchy_enabled: false,
-  intra_ai_max_pairs: 10,
-  hierarchy_ai_max_pairs: 12,
 };
 
 describe("intra contradiction deterministic", () => {

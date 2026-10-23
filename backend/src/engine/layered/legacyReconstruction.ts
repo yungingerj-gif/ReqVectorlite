@@ -1,7 +1,6 @@
-import type { AiClient } from "./ai/aiClient";
 import type { CanonicalRequirement, LegacyReconstructionResult, StructuredFinding } from "./types";
 
-const NO_TIMING = "Timing threshold not specified in source; placeholder left unresolved";
+const NO_TIMING = "threshold not specified";
 
 function hasAnyDigit(s: string): boolean {
   return /\d/.test(s);
@@ -72,54 +71,4 @@ export function reconstructLegacyHeuristic(
     result.inferred_missing_fields = missing;
   }
   return result;
-}
-
-/** Optional AI augment: merges only non-numeric hallucination-safe fields. */
-export async function augmentLegacyWithAi(
-  base: LegacyReconstructionResult,
-  req: CanonicalRequirement,
-  client: AiClient
-): Promise<LegacyReconstructionResult> {
-  const system = `You improve legacy requirements. Output ONLY JSON:
-{"likely_intent":"string","reconstruction_rationale":"string","reconstruction_confidence":0-1,"minimal_cleanup_rewrite":"string","system_level_rewrite":"string","formal_rewrite":"string","inferred_missing_fields":["string"]}
-
-STRICT: Never introduce specific numbers, units, or timeouts not literally present in the source requirement text. If timing is missing, say so in rationale and use phrase "${NO_TIMING}" in rewrites instead of inventing values.`;
-
-  const user = JSON.stringify({ source_text: req.source_text, canonical: req, heuristic_base: base });
-
-  const parsed = await client.completeJson<{
-    likely_intent?: string;
-    reconstruction_rationale?: string;
-    reconstruction_confidence?: number;
-    minimal_cleanup_rewrite?: string;
-    system_level_rewrite?: string;
-    formal_rewrite?: string;
-    inferred_missing_fields?: string[];
-  }>({ system, user });
-
-  if (!parsed) return base;
-
-  const merged: LegacyReconstructionResult = { ...base };
-  if (parsed.likely_intent) merged.likely_intent = parsed.likely_intent;
-  if (parsed.reconstruction_rationale) merged.reconstruction_rationale = parsed.reconstruction_rationale;
-  if (typeof parsed.reconstruction_confidence === "number") {
-    merged.reconstruction_confidence = Math.min(1, Math.max(0, parsed.reconstruction_confidence));
-  }
-  if (parsed.minimal_cleanup_rewrite) merged.minimal_cleanup_rewrite = parsed.minimal_cleanup_rewrite;
-  if (parsed.system_level_rewrite) {
-    if (!hasAnyDigit(req.source_text) && /\b\d+\s*(ms|s|sec)/i.test(parsed.system_level_rewrite)) {
-      if (base.system_level_rewrite !== undefined) {
-        merged.system_level_rewrite = base.system_level_rewrite;
-      }
-    } else {
-      merged.system_level_rewrite = parsed.system_level_rewrite;
-    }
-  }
-  if (parsed.formal_rewrite) merged.formal_rewrite = parsed.formal_rewrite;
-  if (parsed.inferred_missing_fields?.length) {
-    merged.inferred_missing_fields = [
-      ...new Set([...(base.inferred_missing_fields ?? []), ...parsed.inferred_missing_fields]),
-    ];
-  }
-  return merged;
 }

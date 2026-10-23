@@ -1,4 +1,5 @@
 import type { CanonicalRequirement, RequirementParameter, ThresholdSpec } from "../types";
+import { semanticFrameOf } from "../canonicalAccess";
 import { parseRequirementSemanticFrame } from "../semanticParse";
 
 /** Polarity / modality cues for cross-requirement comparison. */
@@ -81,7 +82,14 @@ function polaritiesFromFrame(
 
 function functionSignature(
   req: CanonicalRequirement,
-  partial: { actor?: string; action?: string; object?: string; conditions: string[] }
+  partial: {
+    actor?: string;
+    action?: string;
+    object?: string;
+    conditions: string[];
+    modes?: string[];
+    states?: string[];
+  }
 ): string {
   const parts = [
     req.type,
@@ -89,16 +97,25 @@ function functionSignature(
     (partial.action ?? "").slice(0, 80),
     (partial.object ?? "").slice(0, 80),
     ...partial.conditions.map((c) => c.slice(0, 40)),
+    ...(partial.modes ?? []).map((m) => `mode:${m}`),
+    ...(partial.states ?? []).map((s) => `state:${s}`),
   ];
   return parts.join("|").toLowerCase().replace(/\s+/g, " ");
 }
 
 /**
  * Projects the L0 semantic frame for pairwise engines.
- * Does not re-parse the sentence when `req.semantics` is already present.
+ * Prefers attached CanonicalRequirement fields; re-parses only when the frame was never applied.
  */
 export function extractRequirementSemantics(req: CanonicalRequirement): RequirementSemantics {
-  const frame = req.semantics ?? parseRequirementSemanticFrame(req.normalized_text);
+  const attached =
+    Boolean(req.semantics) ||
+    Boolean(req.actor) ||
+    Boolean(req.action) ||
+    Boolean(req.object) ||
+    (req.parameters?.length ?? 0) > 0 ||
+    (req.verification_signals?.length ?? 0) > 0;
+  const frame = attached ? semanticFrameOf(req) : parseRequirementSemanticFrame(req.normalized_text);
   const fromParams = (req.parameters ?? frame.parameters).map(parameterToParsed);
   let thresholds = fromParams;
   if (thresholds.length === 0 && req.thresholds) {
@@ -109,11 +126,16 @@ export function extractRequirementSemantics(req: CanonicalRequirement): Requirem
     }
   }
 
-  const polarities = polaritiesFromFrame(frame.polarity, req.normalized_text);
-  const actor = frame.actor ?? req.actor;
-  const action = frame.action ?? req.action;
-  const object = frame.object ?? req.object;
-  const conditions = frame.conditions.length > 0 ? frame.conditions : (req.conditions ?? []);
+  const polarities = polaritiesFromFrame(req.polarity ?? frame.polarity, req.normalized_text);
+  const actor = req.actor ?? frame.actor;
+  const action = req.action ?? frame.action;
+  const object = req.object ?? frame.object;
+  const conditions =
+    (req.conditions && req.conditions.length > 0 ? req.conditions : null) ??
+    (frame.conditions.length > 0 ? frame.conditions : []) ??
+    [];
+  const modes = req.modes ?? frame.modes ?? [];
+  const states = req.states ?? frame.states ?? [];
 
   const sem: RequirementSemantics = {
     requirement_id: req.id,
@@ -125,8 +147,17 @@ export function extractRequirementSemantics(req: CanonicalRequirement): Requirem
   if (actor !== undefined) sem.actor = actor;
   if (action !== undefined) sem.action = action;
   if (object !== undefined) sem.object = object;
-  const sigPartial: { actor?: string; action?: string; object?: string; conditions: string[] } = {
+  const sigPartial: {
+    actor?: string;
+    action?: string;
+    object?: string;
+    conditions: string[];
+    modes?: string[];
+    states?: string[];
+  } = {
     conditions: sem.conditions,
+    modes,
+    states,
   };
   if (sem.actor !== undefined) sigPartial.actor = sem.actor;
   if (sem.action !== undefined) sigPartial.action = sem.action;

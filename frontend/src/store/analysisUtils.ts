@@ -16,7 +16,6 @@ export type TableSortColumn =
   | "id"
   | "text"
   | "type"
-  | "cluster"
   | "unambiguous"
   | "complete"
   | "verifiable"
@@ -83,9 +82,6 @@ export function sortRequirementRows(
         break;
       case "type":
         cmp = ra.type.localeCompare(rb.type);
-        break;
-      case "cluster":
-        cmp = (a.semantic?.cluster_id ?? -1) - (b.semantic?.cluster_id ?? -1);
         break;
       case "unambiguous":
         cmp = a.scores.unambiguous - b.scores.unambiguous;

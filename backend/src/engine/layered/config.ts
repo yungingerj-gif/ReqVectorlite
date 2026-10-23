@@ -5,8 +5,6 @@ export interface EngineProfile {
   id: string;
   mode: "active" | "legacy";
   enabled_rule_blocks: string[];
-  ai_attribute_analysis: boolean;
-  ai_legacy_augment: boolean;
   scoring_weights_override: Record<string, number>;
 }
 
@@ -19,23 +17,6 @@ export interface ContradictionConfig {
   shared_condition_bonus: number;
   hierarchy_similarity_floor: number;
   hierarchy_pair_budget: number;
-  ai_intra_enabled: boolean;
-  ai_hierarchy_enabled: boolean;
-  intra_ai_max_pairs: number;
-  hierarchy_ai_max_pairs: number;
-  /**
-   * When true and OPENAI_API_KEY is set, embed requirements and pre-filter intra contradiction
-   * candidates to top-K cosine neighbors (plus cluster IDs on output).
-   */
-  embedding_enabled: boolean;
-  embedding_model: string;
-  embedding_neighbor_top_k: number;
-  embedding_neighbor_min_cosine: number;
-  /** Union-merge clusters when pairwise cosine is at least this value. */
-  embedding_cluster_min_cosine: number;
-  /** Blend embedding cosine into hierarchy parent–child similarity matching. */
-  embedding_hierarchy_match: boolean;
-  embedding_hierarchy_min_cosine: number;
 }
 
 const DEFAULT_CONTRADICTION: ContradictionConfig = {
@@ -46,41 +27,7 @@ const DEFAULT_CONTRADICTION: ContradictionConfig = {
   shared_condition_bonus: 0.2,
   hierarchy_similarity_floor: 0.1,
   hierarchy_pair_budget: 80,
-  ai_intra_enabled: false,
-  ai_hierarchy_enabled: false,
-  intra_ai_max_pairs: 10,
-  hierarchy_ai_max_pairs: 12,
-  embedding_enabled: false,
-  embedding_model: "text-embedding-3-small",
-  embedding_neighbor_top_k: 16,
-  embedding_neighbor_min_cosine: 0.38,
-  embedding_cluster_min_cosine: 0.62,
-  embedding_hierarchy_match: true,
-  embedding_hierarchy_min_cosine: 0.28,
 };
-
-/** Optional LLM pass for set-level cross-requirement same-intent detection. */
-export interface SetLevelCrossConfig {
-  ai_same_intent_enabled: boolean;
-  /** Max pairs sent in one LLM batch (sorted by lexical similarity, strongest first). */
-  ai_same_intent_max_pairs: number;
-}
-
-const DEFAULT_SET_LEVEL_CROSS: SetLevelCrossConfig = {
-  ai_same_intent_enabled: false,
-  ai_same_intent_max_pairs: 24,
-};
-
-function parseSetLevelCross(raw: unknown): SetLevelCrossConfig {
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_SET_LEVEL_CROSS };
-  const o = raw as Record<string, unknown>;
-  return {
-    ai_same_intent_enabled: Boolean(o.ai_same_intent_enabled ?? DEFAULT_SET_LEVEL_CROSS.ai_same_intent_enabled),
-    ai_same_intent_max_pairs: Number(
-      o.ai_same_intent_max_pairs ?? DEFAULT_SET_LEVEL_CROSS.ai_same_intent_max_pairs
-    ),
-  };
-}
 
 function parseContradiction(raw: unknown): ContradictionConfig {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_CONTRADICTION };
@@ -95,28 +42,6 @@ function parseContradiction(raw: unknown): ContradictionConfig {
       o.hierarchy_similarity_floor ?? DEFAULT_CONTRADICTION.hierarchy_similarity_floor
     ),
     hierarchy_pair_budget: Number(o.hierarchy_pair_budget ?? DEFAULT_CONTRADICTION.hierarchy_pair_budget),
-    ai_intra_enabled: Boolean(o.ai_intra_enabled ?? DEFAULT_CONTRADICTION.ai_intra_enabled),
-    ai_hierarchy_enabled: Boolean(o.ai_hierarchy_enabled ?? DEFAULT_CONTRADICTION.ai_hierarchy_enabled),
-    intra_ai_max_pairs: Number(o.intra_ai_max_pairs ?? DEFAULT_CONTRADICTION.intra_ai_max_pairs),
-    hierarchy_ai_max_pairs: Number(o.hierarchy_ai_max_pairs ?? DEFAULT_CONTRADICTION.hierarchy_ai_max_pairs),
-    embedding_enabled: Boolean(o.embedding_enabled ?? DEFAULT_CONTRADICTION.embedding_enabled),
-    embedding_model: String(o.embedding_model ?? DEFAULT_CONTRADICTION.embedding_model),
-    embedding_neighbor_top_k: Math.max(
-      1,
-      Math.floor(Number(o.embedding_neighbor_top_k ?? DEFAULT_CONTRADICTION.embedding_neighbor_top_k))
-    ),
-    embedding_neighbor_min_cosine: Number(
-      o.embedding_neighbor_min_cosine ?? DEFAULT_CONTRADICTION.embedding_neighbor_min_cosine
-    ),
-    embedding_cluster_min_cosine: Number(
-      o.embedding_cluster_min_cosine ?? DEFAULT_CONTRADICTION.embedding_cluster_min_cosine
-    ),
-    embedding_hierarchy_match: Boolean(
-      o.embedding_hierarchy_match ?? DEFAULT_CONTRADICTION.embedding_hierarchy_match
-    ),
-    embedding_hierarchy_min_cosine: Number(
-      o.embedding_hierarchy_min_cosine ?? DEFAULT_CONTRADICTION.embedding_hierarchy_min_cosine
-    ),
   };
 }
 
@@ -136,7 +61,6 @@ export interface EngineConfig {
     count_and_or_as_compound: boolean;
   };
   contradiction: ContradictionConfig;
-  set_level_cross: SetLevelCrossConfig;
   profiles: Record<string, EngineProfile>;
 }
 
@@ -152,10 +76,10 @@ function parseProfiles(raw: unknown): Record<string, EngineProfile> {
       id: String(p.id ?? k),
       mode: p.mode === "legacy" ? "legacy" : "active",
       enabled_rule_blocks: Array.isArray(p.enabled_rule_blocks)
-        ? (p.enabled_rule_blocks as unknown[]).map(String)
+        ? (p.enabled_rule_blocks as unknown[]).map(String).filter(
+            (id) => id !== "ai.attribute_analysis" && id !== "legacy.reconstruction"
+          )
         : [],
-      ai_attribute_analysis: Boolean(p.ai_attribute_analysis),
-      ai_legacy_augment: Boolean(p.ai_legacy_augment),
       scoring_weights_override:
         p.scoring_weights_override && typeof p.scoring_weights_override === "object"
           ? (p.scoring_weights_override as Record<string, number>)
@@ -193,10 +117,7 @@ export function loadEngineConfig(filePath?: string): EngineConfig {
       typeof data.rule_block_registry === "object" && data.rule_block_registry
         ? (data.rule_block_registry as Record<string, boolean>)
         : {},
-    thresholds:
-      typeof data.thresholds === "object" && data.thresholds
-        ? (data.thresholds as Record<string, number>)
-        : {},
+    thresholds: readThresholds(data.thresholds),
     dictionaries: {
       banned_terms: readStringArray((data.dictionaries as Record<string, unknown>)?.banned_terms),
       vague_terms: readStringArray((data.dictionaries as Record<string, unknown>)?.vague_terms),
@@ -212,44 +133,54 @@ export function loadEngineConfig(filePath?: string): EngineConfig {
       ),
     },
     contradiction: parseContradiction(data.contradiction),
-    set_level_cross: parseSetLevelCross(data.set_level_cross),
     profiles: parseProfiles(data.profiles),
   };
   return lockRulesOnlyEngineConfig(parsed);
 }
 
 /**
- * ReqVectorlite: specification review is deterministic rules only (active spec).
- * AI passes, embeddings, and legacy reconstruction cannot be turned on via config or env.
+ * Specification review runs deterministic rules only.
+ * Legacy reconstruction and parent–child comparison stay off.
  */
 export function lockRulesOnlyEngineConfig(config: EngineConfig): EngineConfig {
   const registry = { ...config.rule_block_registry };
-  registry["ai.attribute_analysis"] = false;
+  delete registry["ai.attribute_analysis"];
   registry["legacy.reconstruction"] = false;
+  registry["contradiction.parent_child"] = false;
+  registry["verification.analysis"] = registry["verification.analysis"] ?? registry["deterministic.verifiable"] ?? true;
+  registry["deterministic.verifiable"] = registry["deterministic.verifiable"] ?? true;
 
   const activeBlocks = [
     "deterministic.unambiguous",
     "deterministic.complete",
     "deterministic.verifiable",
+    "verification.analysis",
     "deterministic.singular",
     "deterministic.consistent_correct",
     "setLevel.cross_requirement",
     "contradiction.intra_document",
-    "contradiction.parent_child",
   ];
 
   const defaultActive = config.profiles.default_active_spec;
+  const lockedBlocks = (blocks: string[]) => {
+    const filtered = blocks.filter(
+      (id) => id !== "legacy.reconstruction" && id !== "ai.attribute_analysis" && id !== "contradiction.parent_child"
+    );
+    if (
+      (filtered.includes("deterministic.verifiable") || filtered.includes("verification.analysis")) &&
+      !filtered.includes("verification.analysis")
+    ) {
+      filtered.push("verification.analysis");
+    }
+    return filtered;
+  };
   const profiles: Record<string, EngineProfile> = {
     default_active_spec: {
       id: "default_active_spec",
       mode: "active",
       enabled_rule_blocks: defaultActive
-        ? defaultActive.enabled_rule_blocks.filter(
-            (id) => id !== "legacy.reconstruction" && id !== "ai.attribute_analysis"
-          )
+        ? lockedBlocks(defaultActive.enabled_rule_blocks)
         : activeBlocks,
-      ai_attribute_analysis: false,
-      ai_legacy_augment: false,
       scoring_weights_override: defaultActive?.scoring_weights_override ?? {},
     },
   };
@@ -257,18 +188,19 @@ export function lockRulesOnlyEngineConfig(config: EngineConfig): EngineConfig {
   return {
     ...config,
     rule_block_registry: registry,
-    contradiction: {
-      ...config.contradiction,
-      ai_intra_enabled: false,
-      ai_hierarchy_enabled: false,
-      embedding_enabled: false,
-    },
-    set_level_cross: {
-      ...config.set_level_cross,
-      ai_same_intent_enabled: false,
-    },
     profiles,
   };
+}
+
+function readThresholds(v: unknown): Record<string, number> {
+  if (!v || typeof v !== "object") return {};
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(v as Record<string, unknown>)) {
+    if (key.startsWith("same_intent_ai_")) continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) out[key] = n;
+  }
+  return out;
 }
 
 function readStringArray(v: unknown): string[] {
@@ -280,11 +212,6 @@ function readSynonymGroups(v: unknown): string[][] {
   return (v as unknown[])
     .filter(Array.isArray)
     .map((g) => (g as unknown[]).map(String));
-}
-
-/** Kept for API compatibility; LLM same-intent cannot be enabled in this build. */
-export function withSameIntentLlmEnabled(config: EngineConfig, _enabled: boolean): EngineConfig {
-  return lockRulesOnlyEngineConfig(config);
 }
 
 export function resolveProfile(config: EngineConfig, profileId: string): EngineProfile {

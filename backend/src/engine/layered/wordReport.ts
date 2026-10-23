@@ -126,7 +126,7 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
     new Paragraph({ text: "Executive summary", heading: HeadingLevel.HEADING_1 }),
     new Paragraph({
       children: [
-        new TextRun(`Total findings (incl. set-level): ${allFindings.length}. AI enabled: ${result.meta.ai_enabled ? "yes" : "no"}.`),
+        new TextRun(`Total findings (incl. set-level): ${allFindings.length}.`),
       ],
     }),
     new Paragraph({ text: "Findings by severity", heading: HeadingLevel.HEADING_2 }),

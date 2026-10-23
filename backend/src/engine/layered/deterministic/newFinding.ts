@@ -1,3 +1,13 @@
+/**
+ * Factory for StructuredFinding rows produced by quality / verification rules.
+ *
+ * Always assigns a unique `finding_id` and a layer label. Optional evidence,
+ * rewrite, missing fields, and related ids are omitted when empty so the
+ * JSON payload stays small.
+ *
+ * Default layer is `L1_Deterministic` (quality rules). Verification analysis
+ * passes `layer: "L_Verification"` explicitly.
+ */
 import { randomUUID } from "crypto";
 import type { FindingAttribute, FindingSeverity, StructuredFinding } from "../types";
 

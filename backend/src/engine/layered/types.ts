@@ -25,18 +25,42 @@ export interface RequirementParameter {
 
 export type ObligationVerb = "shall" | "must" | "should" | "may" | "could" | "might";
 
+export type VerificationSignalKind =
+  | "measurement"
+  | "test"
+  | "inspection"
+  | "analysis"
+  | "observable"
+  | "referenced";
+
+/** How the requirement can be observed or tested. */
+export interface VerificationSignal {
+  kind: VerificationSignalKind;
+  name: string;
+  evidence_span?: string;
+}
+
 /**
- * Single semantic frame for a requirement. Built once at normalize time; rules should
- * read this instead of re-parsing `normalized_text`.
+ * Single semantic frame for a requirement. Built once by semanticParse.ts.
+ *
+ * Requirement text
+ *        ↓
+ * semanticParse.ts
+ *        ↓
+ * RequirementSemanticFrame
  */
 export interface RequirementSemanticFrame {
   actor?: string;
-  action?: string;
-  object?: string;
-  conditions: string[];
-  parameters: RequirementParameter[];
   obligation?: ObligationVerb;
   polarity: "required" | "prohibited" | "allowed" | "unknown";
+  action?: string;
+  /** Specific entity, item, or parameter being acted upon by the system or subject. */
+  object?: string;
+  conditions: string[];
+  modes: string[];
+  states: string[];
+  parameters: RequirementParameter[];
+  verification_signals: VerificationSignal[];
 }
 
 /** @deprecated Prefer RequirementParameter. Kept for older findings/tests. */
@@ -58,13 +82,19 @@ export interface CanonicalRequirement {
   semantics?: RequirementSemanticFrame;
 
   actor?: string;
+  obligation?: ObligationVerb;
+  polarity?: "required" | "prohibited" | "allowed" | "unknown";
   action?: string;
+  /** Specific entity, item, or parameter being acted upon by the system or subject. */
   object?: string;
   conditions?: string[];
-  /** Derived from `semantics.parameters` when normalized. */
-  thresholds?: ThresholdSpec[];
+  modes?: string[];
+  states?: string[];
   /** Same objects as `semantics.parameters` (first-class parameters). */
   parameters?: RequirementParameter[];
+  verification_signals?: VerificationSignal[];
+  /** Derived from `semantics.parameters` when normalized. */
+  thresholds?: ThresholdSpec[];
 
   tags?: string[];
   custom_attributes?: Record<string, unknown>;
@@ -128,29 +158,11 @@ export interface RequirementScores {
   overall: number;
 }
 
-export interface RequirementSemanticMeta {
-  cluster_id: number;
-  embedding_model?: string;
-}
-
 export interface PerRequirementResult {
   requirement: CanonicalRequirement;
   findings: StructuredFinding[];
   scores: RequirementScores;
   legacy?: LegacyReconstructionResult;
-  /** Present when semantic embedding layer ran for this analysis. */
-  semantic?: RequirementSemanticMeta;
-}
-
-export interface SemanticEmbeddingMeta {
-  enabled: boolean;
-  skipped_reason?: string;
-  model?: string;
-  dimensions?: number;
-  cluster_count?: number;
-  neighbor_pair_count?: number;
-  intra_prefilter_applied?: boolean;
-  hierarchy_embedding_boost?: boolean;
 }
 
 export interface LayeredContradictionMeta {
@@ -175,11 +187,8 @@ export interface LayeredAnalysisMeta {
   source_document?: string;
   /** Display name for the parent specification when parent–child analysis ran, e.g. parent upload filename. */
   parent_source_document?: string;
-  ai_enabled: boolean;
   organization_id?: string;
   contradiction?: LayeredContradictionMeta;
-  /** Embedding-based clustering / contradiction pre-filter telemetry */
-  semantic_embedding?: SemanticEmbeddingMeta;
 }
 
 export interface LayeredAnalysisResult {
@@ -207,9 +216,4 @@ export interface EngineRunOptions {
   parent_source_document?: string;
   /** Explicit parent/child ID links when both documents use the same id scheme. */
   trace_links?: TraceLinkInput[];
-  /**
-   * Prepended to every layered LLM system prompt (after loading from `data/ai-training-pack.json` or UI).
-   * Used for proprietary layout steering — not fine-tuning.
-   */
-  ai_organization_context?: string;
 }

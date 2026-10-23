@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAnalysisStore } from "../store/useAnalysisStore";
 import { suggestionFeedbackCompositeKey } from "../types/suggestionFeedback";
-import { TrainingPipelineStatusSelect } from "./TrainingPipelineStatusSelect";
 
 type Props = {
   requirementId: string;
@@ -21,7 +20,6 @@ export function SuggestionFeedbackBar({
   const feedbackRunId = useAnalysisStore((s) => s.feedbackRunId);
   const suggestionFeedbackByKey = useAnalysisStore((s) => s.suggestionFeedbackByKey);
   const recordSuggestionFeedback = useAnalysisStore((s) => s.recordSuggestionFeedback);
-  const updateSuggestionFeedbackPipelineStatus = useAnalysisStore((s) => s.updateSuggestionFeedbackPipelineStatus);
   const acceptRewrite = useAnalysisStore((s) => s.acceptRewrite);
   const clearAcceptedRewrite = useAnalysisStore((s) => s.clearAcceptedRewrite);
   const acceptedRewrites = useAnalysisStore((s) => s.acceptedRewrites);
@@ -41,7 +39,6 @@ export function SuggestionFeedbackBar({
     ? suggestionFeedbackCompositeKey(feedbackRunId, requirementId, sourceKey)
     : "";
   const entry = key ? suggestionFeedbackByKey[key] : undefined;
-  const safePipelineDomId = key ? `tp-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}` : "tp-pending";
 
   const record = (verdict: "accepted" | "rejected" | "edited", finalText?: string) => {
     if (!feedbackRunId) return;
@@ -90,7 +87,7 @@ export function SuggestionFeedbackBar({
           onClick={handleAcceptOriginal}
           title="Record acceptance and use this text for revised-source export"
         >
-          Accept AI suggestion
+          Accept suggestion
         </button>
         <button
           type="button"
@@ -99,7 +96,7 @@ export function SuggestionFeedbackBar({
           onClick={handleReject}
           title="Record rejection (clears export if it matched this suggestion)"
         >
-          Reject AI suggestion
+          Reject suggestion
         </button>
         <button
           type="button"
@@ -142,17 +139,6 @@ export function SuggestionFeedbackBar({
       )}
       {entry && (
         <>
-          <div className="lv-suggestion-feedback-pipeline">
-            <label className="lv-training-pipeline-inline-label" htmlFor={safePipelineDomId}>
-              Training pipeline
-            </label>
-            <TrainingPipelineStatusSelect
-              id={safePipelineDomId}
-              value={entry.training_pipeline_status}
-              onChange={(s) => updateSuggestionFeedbackPipelineStatus(key, s)}
-              disabled={!key}
-            />
-          </div>
           <p className="lv-suggestion-feedback-status" role="status">
             Logged: <strong>{entry.verdict}</strong>
             {entry.final_text && entry.verdict !== "rejected" ? (

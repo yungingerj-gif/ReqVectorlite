@@ -4,7 +4,7 @@ import { classifyRequirementType } from "../../services/requirementTypeDesignato
 import type { RequirementsAnalyzeOptions } from "../../models/requirements";
 import type { CanonicalRequirement, CanonicalRequirementType } from "./types";
 import type { EngineConfig } from "./config";
-import { parametersToThresholdSpecs, parseRequirementSemanticFrame } from "./semanticParse";
+import { applySemanticFrameToCanonical, parseRequirementSemanticFrame } from "./semanticParse";
 
 function mapToCanonicalType(rt: RequirementType): CanonicalRequirementType {
   switch (rt) {
@@ -32,9 +32,36 @@ function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+function buildCanonicalRequirement(input: {
+  id: string;
+  source_text: string;
+  normalized_text: string;
+  explicit_id: boolean;
+  type: CanonicalRequirementType;
+  extraTags?: string[];
+}): CanonicalRequirement {
+  const { type: rt } = classifyRequirementType(input.source_text);
+  const type = input.type;
+  const tags: string[] = [...(input.extraTags ?? [])];
+  if (!input.explicit_id) tags.push("generated_id");
+  tags.push(`heuristic_type:${rt}`);
+
+  const req: CanonicalRequirement = {
+    id: input.id,
+    source_text: input.source_text,
+    normalized_text: input.normalized_text,
+    explicit_id: input.explicit_id,
+    type,
+  };
+  applySemanticFrameToCanonical(req, parseRequirementSemanticFrame(input.normalized_text));
+  if (tags.length > 0) req.tags = tags;
+  return req;
+}
+
 /**
- * L0 — segmentation + one semantic parse per statement.
- * Downstream rules should read `semantics` / `parameters`, not re-parse the sentence.
+ * L0 — segmentation + one semantic parse per statement, written onto CanonicalRequirement.
+ *
+ * text → semanticParse.ts → RequirementSemanticFrame → CanonicalRequirement
  */
 export function normalizeToCanonicalRequirements(
   rawText: string,
@@ -46,30 +73,13 @@ export function normalizeToCanonicalRequirements(
     const source_text = p.text;
     const normalized_text = normalizeWhitespace(source_text);
     const { type: rt } = classifyRequirementType(source_text);
-    const type = mapToCanonicalType(rt);
-    const semantics = parseRequirementSemanticFrame(normalized_text);
-    const tags: string[] = [];
-    if (!p.hasExplicitId) tags.push("generated_id");
-    tags.push(`heuristic_type:${rt}`);
-
-    const req: CanonicalRequirement = {
+    return buildCanonicalRequirement({
       id: p.id,
       source_text,
       normalized_text,
       explicit_id: p.hasExplicitId,
-      type,
-      semantics,
-    };
-    if (semantics.actor !== undefined) req.actor = semantics.actor;
-    if (semantics.action !== undefined) req.action = semantics.action;
-    if (semantics.object !== undefined) req.object = semantics.object;
-    if (semantics.conditions.length > 0) req.conditions = semantics.conditions;
-    if (semantics.parameters.length > 0) {
-      req.parameters = semantics.parameters;
-      req.thresholds = parametersToThresholdSpecs(semantics.parameters);
-    }
-    if (tags.length > 0) req.tags = tags;
-    return req;
+      type: mapToCanonicalType(rt),
+    });
   });
 }
 
@@ -87,23 +97,14 @@ export function normalizeParentRequirementsForHierarchy(
   if (reqs.length > 0) return reqs;
   const t = normalizeWhitespace(rawText);
   if (!t) return [];
-  const semantics = parseRequirementSemanticFrame(t);
-  const syn: CanonicalRequirement = {
-    id: "PARENT-DOCUMENT-1",
-    source_text: t,
-    normalized_text: t,
-    explicit_id: false,
-    type: "General",
-    semantics,
-    tags: ["synthetic_parent_document_fallback"],
-  };
-  if (semantics.actor !== undefined) syn.actor = semantics.actor;
-  if (semantics.action !== undefined) syn.action = semantics.action;
-  if (semantics.object !== undefined) syn.object = semantics.object;
-  if (semantics.conditions.length > 0) syn.conditions = semantics.conditions;
-  if (semantics.parameters.length > 0) {
-    syn.parameters = semantics.parameters;
-    syn.thresholds = parametersToThresholdSpecs(semantics.parameters);
-  }
-  return [syn];
+  return [
+    buildCanonicalRequirement({
+      id: "PARENT-DOCUMENT-1",
+      source_text: t,
+      normalized_text: t,
+      explicit_id: false,
+      type: "General",
+      extraTags: ["synthetic_parent_document_fallback"],
+    }),
+  ];
 }

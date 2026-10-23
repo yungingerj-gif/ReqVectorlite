@@ -12,6 +12,10 @@ import {
 } from "../types/suggestionFeedback";
 import * as layeredApi from "../api/layeredApi";
 import type { RowFilter, SeverityFilter, TableSortColumn } from "./analysisUtils";
+import {
+  portRequirementsToMatrix,
+  type TraceabilityRow,
+} from "../traceability/portTraceabilityRows";
 
 export type { SeverityFilter };
 export type SortColumn = TableSortColumn;
@@ -45,10 +49,6 @@ interface AnalysisState {
    * When true, UI shows two upload slots (child + parent) and Run uses both files for parent–child analysis.
    */
   parentChildCompareEnabled: boolean;
-  /**
-   * Unused: this branch never sends LLM same-intent requests.
-   */
-  sameIntentLlmEnabled: boolean;
   hierarchyChildFile: File | null;
   hierarchyParentFile: File | null;
   loading: boolean;
@@ -63,13 +63,17 @@ interface AnalysisState {
   feedbackRunId: string | null;
   /** Latest reviewer verdict per (run, requirement, suggestion surface). */
   suggestionFeedbackByKey: Record<string, SuggestionFeedbackEntry>;
+  /** Full text of the document that was analyzed. Not shown in the matrix until ported. */
+  documentText: string;
+  /** Null until the user ports the current analysis into the traceability matrix. */
+  traceabilityRows: TraceabilityRow[] | null;
+  traceabilityDefinedLabels: string[];
 
   setProfile: (profile: string) => void;
   setMode: (mode: AnalysisMode) => void;
   setRawText: (rawText: string) => void;
   setSourceDocument: (sourceDocument: string) => void;
   setParentChildCompareEnabled: (enabled: boolean) => void;
-  setSameIntentLlmEnabled: (enabled: boolean) => void;
   setHierarchyChildFile: (file: File | null) => void;
   setHierarchyParentFile: (file: File | null) => void;
   setSelectedRequirementId: (id: string | null) => void;
@@ -95,6 +99,8 @@ interface AnalysisState {
   exportSuggestionFeedbackNdjson: () => string;
   loadEngineConfig: () => Promise<void>;
   setEngineConfig: (config: Record<string, unknown> | null) => void;
+  portRequirementsToTraceability: () => void;
+  updateTraceabilityCell: (rowIndex: number, key: keyof TraceabilityRow, value: string) => void;
 }
 
 const SAMPLE = `FR-1: The system shall respond within 50 ms.
@@ -114,7 +120,6 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   sourceDocument: "",
   lastSourceFile: null,
   parentChildCompareEnabled: false,
-  sameIntentLlmEnabled: false,
   hierarchyChildFile: null,
   hierarchyParentFile: null,
   loading: false,
@@ -127,6 +132,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   acceptedRewrites: {},
   feedbackRunId: null,
   suggestionFeedbackByKey: {},
+  documentText: "",
+  traceabilityRows: null,
+  traceabilityDefinedLabels: [],
 
   setProfile: (profile) => set({ profile }),
   setMode: (mode) => set({ mode }),
@@ -139,7 +147,6 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         ? { lastSourceFile: null }
         : { hierarchyChildFile: null, hierarchyParentFile: null }),
     })),
-  setSameIntentLlmEnabled: (sameIntentLlmEnabled) => set({ sameIntentLlmEnabled }),
   setHierarchyChildFile: (hierarchyChildFile) => set({ hierarchyChildFile }),
   setHierarchyParentFile: (hierarchyParentFile) => set({ hierarchyParentFile }),
   setSelectedRequirementId: (selectedRequirementId) => set({ selectedRequirementId }),
@@ -164,6 +171,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       acceptedRewrites: {},
       feedbackRunId: null,
       suggestionFeedbackByKey: {},
+      documentText: "",
+      traceabilityRows: null,
+      traceabilityDefinedLabels: [],
     }),
 
   acceptRewrite: (requirementId, text) =>
@@ -244,57 +254,13 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   runAnalyze: async () => {
-    const {
-      rawText,
-      sourceDocument,
-      parentChildCompareEnabled,
-      hierarchyChildFile,
-      hierarchyParentFile,
-    } = get();
-
-    if (parentChildCompareEnabled) {
-      if (!hierarchyChildFile || !hierarchyParentFile) {
-        set({ error: "Choose both a child file and a parent file, then run analysis." });
-        return;
-      }
-      set({ loading: true, error: null });
-      try {
-        const fd = new FormData();
-        fd.append("file", hierarchyChildFile, hierarchyChildFile.name);
-        fd.append("parent_file", hierarchyParentFile, hierarchyParentFile.name);
-        fd.append("profile", "default_active_spec");
-        fd.append("mode", "active");
-        const analysisResult = await layeredApi.analyzeLayeredUpload(fd);
-        set({
-          analysisResult,
-          rawText: analysisResult.requirements.map((r) => r.requirement.source_text).join("\n\n"),
-          sourceDocument: hierarchyChildFile.name,
-          lastSourceFile: hierarchyChildFile,
-          selectedRequirementId: analysisResult.requirements[0]?.requirement.id ?? null,
-          loading: false,
-          acceptedRewrites: {},
-          ...newRunFeedbackState(),
-        });
-      } catch (e) {
-        set({
-          error: e instanceof Error ? e.message : "Analysis failed",
-          analysisResult: null,
-          selectedRequirementId: null,
-          loading: false,
-          acceptedRewrites: {},
-          feedbackRunId: null,
-          suggestionFeedbackByKey: {},
-        });
-      }
-      return;
-    }
-
+    const { rawText, sourceDocument } = get();
     const text = rawText.trim();
     if (!text) {
       set({ error: "Paste or upload requirements before running analysis." });
       return;
     }
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, traceabilityRows: null, traceabilityDefinedLabels: [], documentText: "" });
     try {
       const analysisResult = await layeredApi.analyzeLayered({
         rawText: text,
@@ -304,63 +270,89 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       });
       set({
         analysisResult,
+        documentText: text,
         selectedRequirementId: analysisResult.requirements[0]?.requirement.id ?? null,
         loading: false,
         acceptedRewrites: {},
         lastSourceFile: null,
+        traceabilityRows: null,
+        traceabilityDefinedLabels: [],
         ...newRunFeedbackState(),
       });
     } catch (e) {
       set({
         error: e instanceof Error ? e.message : "Analysis failed",
         analysisResult: null,
+        documentText: "",
         selectedRequirementId: null,
         loading: false,
         acceptedRewrites: {},
         lastSourceFile: null,
         feedbackRunId: null,
         suggestionFeedbackByKey: {},
+        traceabilityRows: null,
+        traceabilityDefinedLabels: [],
       });
     }
   },
 
   runUpload: async (file: File) => {
-    const { parentChildCompareEnabled } = get();
-    if (parentChildCompareEnabled) {
-      set({
-        error: "Parent/child mode is on — use the Child and Parent upload areas, then Run analysis.",
-      });
-      return;
-    }
     const fd = new FormData();
     fd.append("file", file, file.name);
     fd.append("profile", "default_active_spec");
     fd.append("mode", "active");
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, traceabilityRows: null, traceabilityDefinedLabels: [], documentText: "" });
     try {
-      const analysisResult = await layeredApi.analyzeLayeredUpload(fd);
+      const { result: analysisResult, sourceExtract } = await layeredApi.analyzeLayeredUpload(fd);
       set({
         analysisResult,
+        documentText: sourceExtract,
         rawText: analysisResult.requirements.map((r) => r.requirement.source_text).join("\n\n"),
         sourceDocument: file.name,
         lastSourceFile: file,
         selectedRequirementId: analysisResult.requirements[0]?.requirement.id ?? null,
         loading: false,
         acceptedRewrites: {},
+        traceabilityRows: null,
+        traceabilityDefinedLabels: [],
         ...newRunFeedbackState(),
       });
     } catch (e) {
       set({
         error: e instanceof Error ? e.message : "Upload failed",
         analysisResult: null,
+        documentText: "",
         selectedRequirementId: null,
         lastSourceFile: null,
         loading: false,
         acceptedRewrites: {},
         feedbackRunId: null,
         suggestionFeedbackByKey: {},
+        traceabilityRows: null,
+        traceabilityDefinedLabels: [],
       });
     }
+  },
+
+  portRequirementsToTraceability: () => {
+    const { analysisResult, documentText, rawText } = get();
+    if (!analysisResult) return;
+    const ported = portRequirementsToMatrix(analysisResult, documentText || rawText);
+    set({
+      traceabilityRows: ported.rows,
+      traceabilityDefinedLabels: ported.definedColumnLabels,
+    });
+  },
+
+  updateTraceabilityCell: (rowIndex, key, value) => {
+    if (key === "id" || key === "statement") return;
+    const rows = get().traceabilityRows;
+    if (!rows || rowIndex < 0 || rowIndex >= rows.length) return;
+    const current = rows[rowIndex];
+    if (!current || current[key] === value) return;
+    const next = rows.slice();
+    next[rowIndex] = { ...current, [key]: value };
+    set({ traceabilityRows: next });
   },
 
   exportDocx: async () => {

@@ -41,7 +41,6 @@ export function RequirementsTable() {
   }
 
   const docName = analysisResult.meta.source_document?.trim();
-  const showCluster = Boolean(analysisResult.meta.semantic_embedding?.enabled);
 
   return (
     <section className="lv-panel lv-table-panel">
@@ -65,7 +64,6 @@ export function RequirementsTable() {
               {header("id", "ID")}
               {header("text", "Requirement text")}
               {header("type", "Type")}
-              {showCluster ? header("cluster", "Fn cluster") : null}
               {header("unambiguous", "Unambiguous")}
               {header("complete", "Complete")}
               {header("verifiable", "Verifiable")}
@@ -99,17 +97,6 @@ export function RequirementsTable() {
                   </td>
                   <td className="lv-td-text">{r.source_text}</td>
                   <td>{r.type}</td>
-                  {showCluster ? (
-                    <td>
-                      {row.semantic != null ? (
-                        <span className="lv-cluster-badge" title={row.semantic.embedding_model ?? "embedding"}>
-                          {row.semantic.cluster_id}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  ) : null}
                   <td>
                     <span className={`lv-score-badge ${scoreBadgeClass(scores.unambiguous)}`}>
                       {scores.unambiguous}

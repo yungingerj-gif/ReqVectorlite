@@ -98,7 +98,7 @@ export function DomainConstraintsPage() {
       setLib({ ...saved, summary: saved.summary ?? "" });
       setDrafts(saved.constraints?.length ? saved.constraints.map(toDraft) : [toDraft(newConstraint())]);
       setSaveMsg(
-        "Saved on the server (backend/data/domain-constraints.json). Enabled rows are injected into layered LLM organization context with AI steering."
+        "Saved on the server (backend/data/domain-constraints.json)."
       );
       setTimeout(() => setSaveMsg(null), 8000);
     } catch (e) {
@@ -126,9 +126,8 @@ export function DomainConstraintsPage() {
       <h1 className="lv-h1">Domain constraint library</h1>
       <p className="lv-muted">
         Define quantities your specs use (speed, torque, current, temperature, …) with a{" "}
-        <strong>canonical unit</strong>, optional alternates, and synonyms. Enabled entries are appended to the{" "}
-        <strong>same organization context block</strong> as AI steering on every layered LLM pass — they guide
-        interpretation; they are not extra requirements. Copy{" "}
+        <strong>canonical unit</strong>, optional alternates, and synonyms. Saved rows stay in the library on the
+        server. Copy{" "}
         <code className="lv-doc-name">backend/data/domain-constraints.example.json</code> to{" "}
         <code className="lv-doc-name">backend/data/domain-constraints.json</code> to seed the server without using this UI.
       </p>
@@ -138,7 +137,7 @@ export function DomainConstraintsPage() {
       <section className="lv-panel lv-ai-training-global">
         <h2 className="lv-h2">Library scope</h2>
         <label className="lv-field">
-          Short summary (prepended to the domain block for the model)
+          Short summary
           <textarea
             className="lv-textarea"
             rows={4}
@@ -253,7 +252,7 @@ export function DomainConstraintsPage() {
                 />
               </label>
               <label className="lv-field">
-                Notes for LLM (optional)
+                Notes (optional)
                 <textarea
                   className="lv-textarea"
                   rows={2}

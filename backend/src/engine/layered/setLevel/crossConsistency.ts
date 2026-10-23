@@ -1,6 +1,7 @@
 import { createFinding } from "../deterministic/newFinding";
 import type { CanonicalRequirement, StructuredFinding } from "../types";
 import type { EngineConfig } from "../config";
+import { semanticFrameOf } from "../canonicalAccess";
 import {
   buildSemanticsMap,
   obligationSemanticAlignment,
@@ -253,7 +254,7 @@ type NumericClaim = {
 function extractNumericClaims(reqs: CanonicalRequirement[]): NumericClaim[] {
   const claims: NumericClaim[] = [];
   for (const r of reqs) {
-    const params = r.parameters ?? r.semantics?.parameters ?? [];
+    const params = semanticFrameOf(r).parameters;
     for (const p of params) {
       if (!p.unit) continue;
       claims.push({
@@ -529,39 +530,3 @@ export function runSetLevelCrossRequirement(
   return dedupeSoftCrossPairs(findings);
 }
 
-export type SameIntentCandidatePair = {
-  a: CanonicalRequirement;
-  b: CanonicalRequirement;
-  content_jaccard: number;
-};
-
-/**
- * Pairs that share enough substantive vocabulary to warrant LLM same-intent review.
- * Sorted by content Jaccard descending (caller's max_pairs slice limits API cost).
- */
-export function collectSameIntentAiCandidatePairs(
-  reqs: CanonicalRequirement[],
-  config: EngineConfig
-): SameIntentCandidatePair[] {
-  const byNorm = groupIdsByNormalizedText(reqs);
-  const exactDupPairKeys = exactDupPairKeysFromByNorm(byNorm);
-  const floor = thresholdNum(config, "same_intent_ai_lexical_floor", 0.28);
-  const maxCollect = Math.max(1, Math.round(thresholdNum(config, "same_intent_ai_max_candidates", 64)));
-  const out: SameIntentCandidatePair[] = [];
-  for (let i = 0; i < reqs.length; i++) {
-    for (let j = i + 1; j < reqs.length; j++) {
-      const a = reqs[i]!;
-      const b = reqs[j]!;
-      if (exactDupPairKeys.has(pairKey(a.id, b.id))) continue;
-      if (a.normalized_text.length < 25 || b.normalized_text.length < 25) continue;
-      const ca = contentTokenSet(a.normalized_text);
-      const cb = contentTokenSet(b.normalized_text);
-      if (ca.size < 3 || cb.size < 3) continue;
-      const jac = jaccard(ca, cb);
-      if (jac < floor) continue;
-      out.push({ a, b, content_jaccard: jac });
-    }
-  }
-  out.sort((x, y) => y.content_jaccard - x.content_jaccard);
-  return out.slice(0, maxCollect);
-}
