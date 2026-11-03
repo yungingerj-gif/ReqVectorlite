@@ -21,8 +21,18 @@ describe("layered engine smoke", () => {
     );
     expect(result.meta.requirement_count).toBeGreaterThan(5);
     expect(result.requirements.length).toBe(result.meta.requirement_count);
-    expect(result.requirements[0]?.scores.overall).toBeGreaterThanOrEqual(0);
-    expect(result.requirements[0]?.scores.overall).toBeLessThanOrEqual(100);
+    expect(result.requirements[0]?.scores.maturity).toBeGreaterThanOrEqual(0);
+    expect(result.requirements[0]?.scores.maturity).toBeLessThanOrEqual(2);
+    expect(result.quality_matrix.length).toBe(result.requirements.length);
+    expect(result.quality_matrix[0]?.length).toBe(5);
+    expect(result.document_maturity.maturity).toBeGreaterThanOrEqual(0);
+    expect(result.document_maturity.maturity).toBeLessThanOrEqual(2);
+    expect(result.document_maturity.system_maturity_index).toBeGreaterThanOrEqual(0);
+    expect(result.document_maturity.system_maturity_index).toBeLessThanOrEqual(100);
+    expect(result.document_maturity.defect_profile).toHaveLength(5);
+    expect(result.requirements.every((r) => r.scores.quality_score >= 0 && r.scores.quality_score <= 100)).toBe(
+      true
+    );
     expect(Array.isArray(result.set_level_findings)).toBe(true);
     expect(result.requirements.every((r) => r.findings.length >= 0)).toBe(true);
     expect(result.meta.mode).toBe("active");

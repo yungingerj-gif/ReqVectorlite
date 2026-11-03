@@ -5,7 +5,6 @@ export interface EngineProfile {
   id: string;
   mode: "active" | "legacy";
   enabled_rule_blocks: string[];
-  scoring_weights_override: Record<string, number>;
 }
 
 /** Tunables for intra-doc and parent-child contradiction engines. */
@@ -47,8 +46,8 @@ function parseContradiction(raw: unknown): ContradictionConfig {
 
 export interface EngineConfig {
   organization_id: string;
-  scoring_penalties: Record<"low" | "medium" | "high", number>;
-  scoring_weights: Record<string, number>;
+  /** Multiplier on feasibility and verifiability for explicitly safety-critical requirements. */
+  safety_critical_weight: number;
   rule_block_registry: Record<string, boolean>;
   thresholds: Record<string, number>;
   dictionaries: {
@@ -64,8 +63,6 @@ export interface EngineConfig {
   profiles: Record<string, EngineProfile>;
 }
 
-const DEFAULT_PENALTIES = { low: 10, medium: 20, high: 35 };
-
 function parseProfiles(raw: unknown): Record<string, EngineProfile> {
   const out: Record<string, EngineProfile> = {};
   if (!raw || typeof raw !== "object") return out;
@@ -80,10 +77,6 @@ function parseProfiles(raw: unknown): Record<string, EngineProfile> {
             (id) => id !== "ai.attribute_analysis" && id !== "legacy.reconstruction"
           )
         : [],
-      scoring_weights_override:
-        p.scoring_weights_override && typeof p.scoring_weights_override === "object"
-          ? (p.scoring_weights_override as Record<string, number>)
-          : {},
     };
   }
   return out;
@@ -96,23 +89,10 @@ export function loadEngineConfig(filePath?: string): EngineConfig {
     throw new Error(`Engine config not found: ${p}`);
   }
   const data = JSON.parse(fs.readFileSync(p, "utf-8")) as Record<string, unknown>;
-  const penalties = {
-    ...DEFAULT_PENALTIES,
-    ...(typeof data.scoring_penalties === "object" && data.scoring_penalties
-      ? (data.scoring_penalties as Record<string, number>)
-      : {}),
-  };
+  const safetyWeight = Number(data.safety_critical_weight ?? 2);
   const parsed: EngineConfig = {
     organization_id: String(data.organization_id ?? "default"),
-    scoring_penalties: {
-      low: Number(penalties.low ?? DEFAULT_PENALTIES.low),
-      medium: Number(penalties.medium ?? DEFAULT_PENALTIES.medium),
-      high: Number(penalties.high ?? DEFAULT_PENALTIES.high),
-    },
-    scoring_weights:
-      typeof data.scoring_weights === "object" && data.scoring_weights
-        ? (data.scoring_weights as Record<string, number>)
-        : {},
+    safety_critical_weight: Number.isFinite(safetyWeight) && safetyWeight >= 1 ? safetyWeight : 2,
     rule_block_registry:
       typeof data.rule_block_registry === "object" && data.rule_block_registry
         ? (data.rule_block_registry as Record<string, boolean>)
@@ -181,7 +161,6 @@ export function lockRulesOnlyEngineConfig(config: EngineConfig): EngineConfig {
       enabled_rule_blocks: defaultActive
         ? lockedBlocks(defaultActive.enabled_rule_blocks)
         : activeBlocks,
-      scoring_weights_override: defaultActive?.scoring_weights_override ?? {},
     },
   };
 
@@ -227,6 +206,3 @@ export function isBlockEnabled(config: EngineConfig, profile: EngineProfile, blo
   return profile.enabled_rule_blocks.includes(blockId) && config.rule_block_registry[blockId] === true;
 }
 
-export function effectiveScoringWeights(config: EngineConfig, profile: EngineProfile): Record<string, number> {
-  return { ...config.scoring_weights, ...profile.scoring_weights_override };
-}

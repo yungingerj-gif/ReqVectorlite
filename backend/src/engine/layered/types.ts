@@ -149,19 +149,53 @@ export interface LegacyReconstructionResult {
   formal_rewrite?: string;
 }
 
-export interface RequirementScores {
-  unambiguous: number;
-  complete: number;
-  verifiable: number;
-  singular: number;
-  consistent_correct: number;
-  overall: number;
+/** Cell of the quality matrix. 0 missed, 1 partial, 2 met. */
+export type QualityScore = 0 | 1 | 2;
+
+/**
+ * Pass 1 row. `maturity` is the minimum cell.
+ * `quality_score` is q_i, the row of Q as a percentage of its maximum (each raw cell tops out at 2).
+ * `weight` is 1, or the safety-critical weight when the requirement is explicitly labeled.
+ */
+export interface QualityVector {
+  necessary: QualityScore;
+  unambiguous: QualityScore;
+  complete: QualityScore;
+  feasible: QualityScore;
+  verifiable: QualityScore;
+  maturity: QualityScore;
+  /** q_i = (sum_j Q_ij / (2 * sum_j W_ij)) * 100. Range 0–100. */
+  quality_score: number;
+  safety_critical: boolean;
+  weight: number;
+}
+
+/**
+ * Pass 2. The four checks are the document row.
+ * Weighted feasibility and verifiability are the matching columns of Q divided by the columns of W.
+ * `system_maturity_index` is the mean of the per-requirement quality scores.
+ * `defect_profile` is the column means of the raw matrix R.
+ */
+export interface DocumentMaturity {
+  completeness: QualityScore;
+  consistency: QualityScore;
+  bounded: QualityScore;
+  feasible: QualityScore;
+  maturity: QualityScore;
+  weighted_feasibility: number;
+  weighted_verifiability: number;
+  safety_critical_weight: number;
+  safety_critical_count: number;
+  /** M_sys = (1/n) sum q_i. Range 0–100. */
+  system_maturity_index: number;
+  /** d = (1/n) sum r_i. Order: necessary, unambiguous, complete, feasible, verifiable. Each mean is 0–2. */
+  defect_profile: number[];
 }
 
 export interface PerRequirementResult {
   requirement: CanonicalRequirement;
   findings: StructuredFinding[];
-  scores: RequirementScores;
+  scores: QualityVector;
   legacy?: LegacyReconstructionResult;
 }
 
@@ -195,6 +229,13 @@ export interface LayeredAnalysisResult {
   meta: LayeredAnalysisMeta;
   requirements: PerRequirementResult[];
   set_level_findings: StructuredFinding[];
+  /** R, n×5 raw scores: necessary, unambiguous, complete, feasible, verifiable. */
+  quality_matrix: number[][];
+  /** W, n×5. Safety-critical rows use the safety weight on feasible and verifiable. */
+  weight_matrix: number[][];
+  /** Q = R × W, same shape as R. */
+  weighted_evaluation_matrix: number[][];
+  document_maturity: DocumentMaturity;
   /** Present when a parent specification was analyzed (for hierarchy findings UI). */
   parent_requirements?: CanonicalRequirement[];
 }

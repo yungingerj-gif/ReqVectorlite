@@ -18,13 +18,7 @@
     "approved_vocabulary": [],
     "glossary_mappings": {}
   },
-  "scoring_weights": {
-    "unambiguous": 1,
-    "complete": 1,
-    "verifiable": 1,
-    "singular": 1,
-    "consistent_correct": 1
-  },
+  "safety_critical_weight": 2,
   "profiles": {
     "active_spec": {
       "id": "active_spec",

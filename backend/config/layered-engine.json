@@ -1,17 +1,6 @@
 {
   "organization_id": "default",
-  "scoring_penalties": {
-    "low": 10,
-    "medium": 20,
-    "high": 35
-  },
-  "scoring_weights": {
-    "unambiguous": 1,
-    "complete": 1,
-    "verifiable": 1,
-    "singular": 1,
-    "consistent_correct": 1
-  },
+  "safety_critical_weight": 2,
   "rule_block_registry": {
     "deterministic.unambiguous": true,
     "deterministic.complete": true,
@@ -93,8 +82,7 @@
         "deterministic.consistent_correct",
         "setLevel.cross_requirement",
         "contradiction.intra_document"
-      ],
-      "scoring_weights_override": {}
+      ]
     }
   }
 }

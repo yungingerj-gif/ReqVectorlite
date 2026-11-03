@@ -8,8 +8,77 @@ import type {
   VerificationSignal,
 } from "./types";
 
-const UNIT_ALT =
-  "ms|s|sec|secs|seconds|min|mins|h|hrs|hz|khz|mhz|%|percent|v|a|ma|w|kw|mw|n|kn|nm|lbf|pa|kpa|mpa|bar|psi|c|°c|deg|mm|cm|m|in|ft|kg|g|lb|rpm";
+const UNIT_ALT = [
+  "miles?\\s*per\\s*hour",
+  "kilometers?\\s*per\\s*hour",
+  "km\\/h",
+  "mi\\/h",
+  "m\\/s",
+  "ft\\/s",
+  "deg\\/s",
+  "l\\/min",
+  "mph",
+  "kph",
+  "kmh",
+  "fps",
+  "knots?",
+  "kt",
+  "mbps",
+  "kbps",
+  "gbps",
+  "bps",
+  "°f",
+  "degf",
+  "dba",
+  "dbm",
+  "db",
+  "ppm",
+  "gpm",
+  "lpm",
+  "kohm",
+  "ohm",
+  "ms",
+  "s",
+  "sec",
+  "secs",
+  "seconds",
+  "min",
+  "mins",
+  "h",
+  "hrs",
+  "hz",
+  "khz",
+  "mhz",
+  "%",
+  "percent",
+  "v",
+  "a",
+  "ma",
+  "w",
+  "kw",
+  "mw",
+  "n",
+  "kn",
+  "nm",
+  "lbf",
+  "pa",
+  "kpa",
+  "mpa",
+  "bar",
+  "psi",
+  "c",
+  "°c",
+  "deg",
+  "mm",
+  "cm",
+  "m",
+  "in",
+  "ft",
+  "kg",
+  "g",
+  "lb",
+  "rpm",
+].join("|");
 
 const ACTOR_CUES =
   "subsystem|system|software|hardware|controller|operator|user|vehicle|ecu|module|interface|component";
@@ -61,18 +130,24 @@ function normalizeWhitespace(s: string): string {
 }
 
 function canonicalUnit(raw: string): string {
-  const u = raw.toLowerCase();
+  const u = raw.toLowerCase().replace(/\s+/g, " ");
   if (u === "sec" || u === "secs" || u === "seconds") return "s";
   if (u === "mins") return "min";
   if (u === "hrs") return "h";
   if (u === "percent") return "%";
+  if (u === "mph" || u === "mi/h" || /^miles?\s+per\s+hour$/.test(u)) return "mph";
+  if (u === "kph" || u === "kmh" || u === "km/h" || /^kilometers?\s+per\s+hour$/.test(u)) return "km/h";
+  if (u === "m/s") return "m/s";
+  if (u === "fps" || u === "ft/s") return "ft/s";
+  if (u === "knot" || u === "knots" || u === "kt") return "kt";
+  if (u === "degf" || u === "°f") return "°f";
   return u;
 }
 
 function phraseToOperator(phrase: string): ComparisonOperator | undefined {
   const p = phrase.toLowerCase().replace(/\s+/g, " ").trim();
   if (
-    /^(<=|≤|at most|no more than|less than or equal|not (?:to )?exceed(?:ed|ing)?|must not exceed|shall not exceed|maximum|max)$/.test(
+    /^(<=|≤|at most|no more than|up to|less than or equal|not (?:to )?exceed(?:ed|ing)?|must not exceed|shall not exceed|maximum|max)$/.test(
       p
     )
   ) {
@@ -462,7 +537,7 @@ export function parseRequirementParameters(text: string): RequirementParameter[]
   }
 
   const opNumRe = new RegExp(
-    `\\b(at\\s+least|at\\s+most|no\\s+more\\s+than|no\\s+less\\s+than|less\\s+than|greater\\s+than|more\\s+than|within|<=|>=|<|>)\\s*(\\d+(?:\\.\\d+)?)\\s*(${UNIT_ALT})\\b`,
+    `\\b(up\\s+to|at\\s+least|at\\s+most|no\\s+more\\s+than|no\\s+less\\s+than|less\\s+than|greater\\s+than|more\\s+than|within|<=|>=|<|>)\\s*(\\d+(?:\\.\\d+)?)\\s*(${UNIT_ALT})\\b`,
     "gi"
   );
   for (const m of text.matchAll(opNumRe)) {
@@ -509,14 +584,17 @@ export function parseRequirementParameters(text: string): RequirementParameter[]
     });
     if (covered) continue;
     const left = text.slice(Math.max(0, index - 90), index);
-    const fromMax = left.match(/\b(maximum|max|minimum|min)\s*$/i);
-    let operator: ComparisonOperator = "=";
-    if (fromMax) {
-      operator = phraseToOperator(fromMax[1]!) ?? "=";
-    } else if (/\bnot\s+exceed/i.test(left)) {
-      operator = "<=";
-    }
-    const parameter = parameterFromLeftContext(left.replace(/\b(maximum|max|minimum|min)\s*$/i, ""), "metric");
+    const trailingOp = left.match(
+      /\b(up\s+to|at\s+least|at\s+most|no\s+more\s+than|no\s+less\s+than|less\s+than|greater\s+than|more\s+than|not\s+(?:to\s+)?exceed(?:ing)?|exceed(?:s|ing)?|above|below|under|within|maximum|max|minimum|min)\s*$/i
+    );
+    const operator: ComparisonOperator = trailingOp ? (phraseToOperator(trailingOp[1]!) ?? "=") : "=";
+    const namingLeft = left
+      .replace(new RegExp(`\\b\\d+(?:\\.\\d+)?\\s+(?:${UNIT_ALT})\\b`, "gi"), " ")
+      .replace(
+        /\b(up\s+to|at\s+least|at\s+most|no\s+more\s+than|no\s+less\s+than|less\s+than|greater\s+than|more\s+than|not\s+(?:to\s+)?exceed(?:ing)?|exceed(?:s|ing)?|above|below|under|within|maximum|max|minimum|min)\s*$/i,
+        ""
+      );
+    const parameter = parameterFromLeftContext(namingLeft, "metric");
     pushParam(out, seen, {
       parameter,
       operator,

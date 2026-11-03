@@ -30,7 +30,7 @@ import { runQualityRules } from "./quality/runQualityRules";
 import { runVerificationAnalysis, LEGACY_BLOCK_ID as VERIFIABLE_LEGACY_ID } from "./verification/runVerificationAnalysis";
 import { runSetLevelCrossRequirement } from "./setLevel/crossConsistency";
 import { runContradictionEngine } from "./contradiction/runContradictionEngine";
-import { scoreRequirements } from "./scoring";
+import { assessQualityMatrix } from "./qualityMatrix";
 import type { EngineRunOptions, LayeredAnalysisResult, PerRequirementResult } from "./types";
 
 function verificationEnabled(config: EngineConfig, profile: ReturnType<typeof resolveProfile>): boolean {
@@ -75,18 +75,27 @@ export async function runLayeredEngine(
   });
   setLevel = [...setLevel, ...contradiction.findings];
 
-  const scoreMap = scoreRequirements(requirements, perReq, setLevel, locked, profile);
+  const assessed = assessQualityMatrix(
+    requirements,
+    setLevel,
+    locked.safety_critical_weight,
+    locked.dictionaries
+  );
 
   const requirementsOut = requirements.map((r) => {
     const row: PerRequirementResult = {
       requirement: r,
       findings: perReq.get(r.id) ?? [],
-      scores: scoreMap.get(r.id)!,
+      scores: assessed.scores.get(r.id)!,
     };
     return row;
   });
 
   return {
+    quality_matrix: assessed.quality_matrix,
+    weight_matrix: assessed.weight_matrix,
+    weighted_evaluation_matrix: assessed.weighted_evaluation_matrix,
+    document_maturity: assessed.document,
     meta: {
       profile: profile.id,
       mode: "active",

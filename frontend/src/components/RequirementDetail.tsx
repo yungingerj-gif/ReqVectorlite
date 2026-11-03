@@ -151,16 +151,27 @@ export function RequirementDetail() {
         );
       })()}
 
-      <h3 className="lv-h3">Attribute scores</h3>
+      <h3 className="lv-h3">Quality score</h3>
+      <p className="lv-muted">
+        {typeof scores.quality_score === "number" ? `${scores.quality_score}%` : "—"} of the maximum weighted row.
+        Each raw cell tops out at 2, so the percentage is the row sum of Q divided by 2 times the row sum of W.
+      </p>
+      <h3 className="lv-h3">Quality vector</h3>
+      {scores.safety_critical ? (
+        <p className="lv-muted">
+          Safety-critical. Feasibility and verifiability use weight {scores.weight} in the document rollup. The cells stay
+          0, 1, or 2.
+        </p>
+      ) : null}
       <div className="lv-score-grid">
         {(
           [
+            ["Necessary", scores.necessary],
             ["Unambiguous", scores.unambiguous],
             ["Complete", scores.complete],
+            ["Feasible", scores.feasible],
             ["Verifiable", scores.verifiable],
-            ["Singular", scores.singular],
-            ["Consistent", scores.consistent_correct],
-            ["Overall", scores.overall],
+            ["Maturity", scores.maturity],
           ] as const
         ).map(([label, val]) => (
           <div key={label} className="lv-score-cell">

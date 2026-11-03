@@ -23,6 +23,13 @@ describe("semantic parser — first-class parameters", () => {
     );
   });
 
+  it("parses a speed ceiling such as up to 12 mph", () => {
+    const params = parseRequirementParameters(
+      "The system shall operate at vehicle speeds up to 12 mph."
+    );
+    expect(params.some((p) => p.value === 12 && p.operator === "<=" && p.unit === "mph")).toBe(true);
+  });
+
   it("parses within 50 ms as an upper bound", () => {
     const params = parseRequirementParameters("The system shall respond within 50 ms.");
     expect(params.some((p) => p.value === 50 && p.operator === "<=" && p.unit === "ms")).toBe(true);
@@ -134,6 +141,11 @@ describe("semantic parser — first-class parameters", () => {
         operator: "=",
         value: 500,
         unit: "nm",
+      }),
+      expect.objectContaining({
+        operator: ">",
+        value: 20,
+        unit: "km/h",
       }),
     ]);
     expect(frame.verification_signals.some((s) => s.kind === "measurement" && s.name.includes("500"))).toBe(
