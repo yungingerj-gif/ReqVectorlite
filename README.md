@@ -41,7 +41,7 @@ We do not use a separate “design gap” score. Design-related determinations a
 
 - **Consistency**: `detectConflicts()` finds requirements that state different numeric values for the same metric (e.g. max latency 50 ms vs 20 ms). Affected requirements get `dimensions.consistent = "warn"`.
 - **Completeness**: The response includes `designConsistencyAndCompleteness` with conflict count, type coverage, traceability gaps, and consistency-warn count.
-- **Ripple Risk Simulation Engine** (predictive ripple; most tools don't do this): When adding or modifying a requirement, impact on **downstream** nodes (requirements that reference it by ID) is simulated. Four ripples: performance degradation, cost growth, verification expansion, safety classification escalation. **RippleImpactScore** = Σ downstream node delta magnitudes. Each requirement gets `rippleSimulation`; design summary includes `highRippleImpactCount` (score ≥ 5) and `maxRippleImpactScore`.
+- **Ripple Risk Simulation Engine**: When adding or modifying a requirement, impact on **downstream** nodes (requirements that reference it by ID) is simulated. Four ripples: performance degradation, cost growth, verification expansion, safety classification escalation. **RippleImpactScore** = Σ downstream node delta magnitudes. Each requirement gets `rippleSimulation`; design summary includes `highRippleImpactCount` (score ≥ 5) and `maxRippleImpactScore`.
 
 ### Multi-layer requirement graph
 
