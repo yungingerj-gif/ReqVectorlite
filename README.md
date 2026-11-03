@@ -43,16 +43,6 @@ We do not use a separate “design gap” score. Design-related determinations a
 - **Completeness**: The response includes `designConsistencyAndCompleteness` with conflict count, type coverage, traceability gaps, and consistency-warn count.
 - **Ripple Risk Simulation Engine**: When adding or modifying a requirement, impact on **downstream** nodes (requirements that reference it by ID) is simulated. Four ripples: performance degradation, cost growth, verification expansion, safety classification escalation. **RippleImpactScore** = Σ downstream node delta magnitudes. Each requirement gets `rippleSimulation`; design summary includes `highRippleImpactCount` (score ≥ 5) and `maxRippleImpactScore`.
 
-### Multi-layer requirement graph
-
-Instead of flat requirement text only, the spec is turned into a **typed constraint graph**:
-
-- **Node types**: Functional, Performance, Interface, Constraint, Safety, Verification (plus Derived, Cybersecurity, Environmental, Regulatory).
-- **Edge types**: **depends-on**, **constrains**, **verifies**, **conflicts-with**, **derived-from**, **regulated-by**. Edges are inferred from references in text (e.g. “verifies REQ-001”) and from conflict detection (**conflicts-with**).
-- **Constraint propagation weighting**: Each edge has a weight (0–1). Per-node **propagation weight** = sum of incoming edge weights. This gives a heterogeneous requirement graph with constraint propagation, not just NLP tagging.
-
-The API response includes `requirementGraph` (nodes, edges, `nodePropagationWeights`). The UI shows a collapsible “Multi-layer requirement graph” with nodes grouped by type and edges grouped by type with weights.
-
 ### Output
 
 The API returns:
@@ -60,7 +50,6 @@ The API returns:
 - A finding per requirement (dimension statuses + issue list)
 - Potential cross-requirement conflicts
 - A summary count (good / needs_attention / poor)
-- **requirementGraph** (nodes by type, typed edges, nodePropagationWeights)
 
 ## Stage 1 – ReqVector
 
