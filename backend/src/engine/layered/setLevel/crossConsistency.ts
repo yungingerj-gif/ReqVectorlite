@@ -1,6 +1,7 @@
 import { createFinding } from "../deterministic/newFinding";
 import type { CanonicalRequirement, StructuredFinding } from "../types";
 import type { EngineConfig } from "../config";
+import { semanticFrameOf } from "../canonicalAccess";
 import {
   buildSemanticsMap,
   obligationSemanticAlignment,
@@ -252,16 +253,15 @@ type NumericClaim = {
 
 function extractNumericClaims(reqs: CanonicalRequirement[]): NumericClaim[] {
   const claims: NumericClaim[] = [];
-  const pattern =
-    /\b(maximum|max|min|minimum|timeout|latency|response)\s+([a-z][a-z0-9 _-]{2,40}?)\s+(\d+(?:\.\d+)?)\s*(ms|s|sec|seconds|min|%|hz)\b/gi;
   for (const r of reqs) {
-    for (const m of r.normalized_text.matchAll(pattern)) {
-      const key = `${String(m[1]).toLowerCase()} ${String(m[2]).toLowerCase()}`;
+    const params = semanticFrameOf(r).parameters;
+    for (const p of params) {
+      if (!p.unit) continue;
       claims.push({
         requirementId: r.id,
-        key,
-        value: Number(m[3]),
-        unit: String(m[4]).toLowerCase(),
+        key: `${p.parameter} ${p.unit}`.toLowerCase(),
+        value: p.value,
+        unit: p.unit.toLowerCase(),
       });
     }
   }
@@ -530,39 +530,3 @@ export function runSetLevelCrossRequirement(
   return dedupeSoftCrossPairs(findings);
 }
 
-export type SameIntentCandidatePair = {
-  a: CanonicalRequirement;
-  b: CanonicalRequirement;
-  content_jaccard: number;
-};
-
-/**
- * Pairs that share enough substantive vocabulary to warrant LLM same-intent review.
- * Sorted by content Jaccard descending (caller's max_pairs slice limits API cost).
- */
-export function collectSameIntentAiCandidatePairs(
-  reqs: CanonicalRequirement[],
-  config: EngineConfig
-): SameIntentCandidatePair[] {
-  const byNorm = groupIdsByNormalizedText(reqs);
-  const exactDupPairKeys = exactDupPairKeysFromByNorm(byNorm);
-  const floor = thresholdNum(config, "same_intent_ai_lexical_floor", 0.28);
-  const maxCollect = Math.max(1, Math.round(thresholdNum(config, "same_intent_ai_max_candidates", 64)));
-  const out: SameIntentCandidatePair[] = [];
-  for (let i = 0; i < reqs.length; i++) {
-    for (let j = i + 1; j < reqs.length; j++) {
-      const a = reqs[i]!;
-      const b = reqs[j]!;
-      if (exactDupPairKeys.has(pairKey(a.id, b.id))) continue;
-      if (a.normalized_text.length < 25 || b.normalized_text.length < 25) continue;
-      const ca = contentTokenSet(a.normalized_text);
-      const cb = contentTokenSet(b.normalized_text);
-      if (ca.size < 3 || cb.size < 3) continue;
-      const jac = jaccard(ca, cb);
-      if (jac < floor) continue;
-      out.push({ a, b, content_jaccard: jac });
-    }
-  }
-  out.sort((x, y) => y.content_jaccard - x.content_jaccard);
-  return out.slice(0, maxCollect);
-}

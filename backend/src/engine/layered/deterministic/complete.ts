@@ -1,35 +1,56 @@
+/**
+ * Completeness quality rule (INCOSE-style).
+ *
+ * A requirement is complete when it names who is responsible, what shall be
+ * done, and (for typed statements) the fields that type implies. Gaps here
+ * usually mean the statement cannot be implemented or verified as written.
+ *
+ * Prefers the L0 semantic frame (`obligation`, `actor`, `action`,
+ * `parameters`) attached on CanonicalRequirement; falls back to
+ * `normalized_text` when a field was not parsed.
+ *
+ * Config:
+ * - `thresholds.min_text_length_for_complete` — character floor (default 8)
+ *
+ * Findings use attribute `"Complete"`.
+ */
 import type { CanonicalRequirement, StructuredFinding } from "../types";
 import { createFinding } from "./newFinding";
 import type { DeterministicContext } from "./ruleContext";
 
+/** Registry / profile id for this quality block. */
 export const BLOCK_ID = "deterministic.complete";
 
-function hasObligation(text: string): boolean {
-  return /\b(shall|must)\b/i.test(text);
+/** True when the frame or text has a binding shall/must (or required polarity). */
+function hasObligation(req: CanonicalRequirement): boolean {
+  const v = req.obligation ?? req.semantics?.obligation;
+  if (v === "shall" || v === "must") return true;
+  if ((req.polarity ?? req.semantics?.polarity) === "required") return true;
+  return /\b(shall|must)\b/i.test(req.normalized_text);
 }
 
-/** Actor cue words; (?!-) avoids counting hyphenated adjectives (e.g. system-level, user-defined) as the responsible entity. */
-const ACTOR_CUE_RE =
-  /\b(system|software|hardware|controller|operator|user|vehicle|module|subsystem|interface|component)\b(?!-)/i;
-
-/** Text before the first normative verb — avoids treating words in trailing phrases (e.g. "reverse vehicle operation") as the obligation subject. */
-function subjectSpanBeforeFirstObligation(text: string): string {
-  const m = text.match(/^([\s\S]*?)\b(shall|must)\b/i);
-  const prefix = m?.[1] ?? text;
-  return prefix.trim();
+/** True when a responsible entity was parsed into the subject/actor slot. */
+function hasActor(req: CanonicalRequirement): boolean {
+  const actor = req.actor ?? req.semantics?.actor;
+  return Boolean(actor && actor.length > 0);
 }
 
-function hasActorish(text: string, actor?: string): boolean {
-  if (actor && actor.length > 0) return true;
-  const subjectSpan = subjectSpanBeforeFirstObligation(text);
-  return ACTOR_CUE_RE.test(subjectSpan);
+/** Numeric claims from the single L0 parse — not re-scanned here. */
+function parametersOf(req: CanonicalRequirement) {
+  return req.parameters ?? req.semantics?.parameters ?? [];
 }
 
+/**
+ * Evaluate whether a requirement has the structural pieces its type needs.
+ * Several findings may apply to one row.
+ */
 export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext): StructuredFinding[] {
   const findings: StructuredFinding[] = [];
   const text = req.normalized_text;
   const minLen = ctx.config.thresholds.min_text_length_for_complete ?? 8;
 
+  // --- Rule: insufficient_detail (medium) -----------------------------------
+  // Extremely short strings cannot carry actor + obligation + object.
   if (text.length < minLen) {
     findings.push(
       createFinding({
@@ -46,7 +67,9 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (!hasObligation(text)) {
+  // --- Rule: missing_obligation_verb (high) ---------------------------------
+  // Without shall/must there is no mandatory statement to implement.
+  if (!hasObligation(req)) {
     findings.push(
       createFinding({
         requirement_id: req.id,
@@ -63,7 +86,10 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (!hasActorish(text, req.actor)) {
+  // --- Rule: missing_actor (medium) -----------------------------------------
+  // Actor comes from the subject span before the obligation verb. Confidence
+  // is lower because some styles omit a named entity by convention.
+  if (!hasActor(req)) {
     findings.push(
       createFinding({
         requirement_id: req.id,
@@ -79,11 +105,10 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (
-    req.type === "Performance" &&
-    (!req.thresholds || req.thresholds.length === 0) &&
-    !/\d/.test(text)
-  ) {
+  // --- Rule: performance_without_metric (high) ------------------------------
+  // Performance type implies how well, not only what. Flag when the parser
+  // found no parameter and the text has no digit at all.
+  if (req.type === "Performance" && parametersOf(req).length === 0 && !/\d/.test(text)) {
     findings.push(
       createFinding({
         requirement_id: req.id,
@@ -93,12 +118,14 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
         confidence: 0.86,
         issue_type: "performance_without_metric",
         explanation:
-          "Performance-type requirement has no measurable value or extracted threshold in the text.",
+          "Performance-type requirement has no measurable value or extracted parameter in the text.",
         missing_fields: ["measurable_threshold", "unit"],
       })
     );
   }
 
+  // --- Rule: interface_missing_context (medium) -----------------------------
+  // Interface type should name a medium or protocol so the boundary is testable.
   if (
     req.type === "Interface" &&
     !/\b(interface|bus|protocol|api|signal|connector|port|message|packet|can|ethernet|uart)\b/i.test(
@@ -120,7 +147,11 @@ export function runComplete(req: CanonicalRequirement, ctx: DeterministicContext
     );
   }
 
-  if (hasObligation(text) && (!req.action || req.action.length < 3)) {
+  // --- Rule: incomplete_action_structure (low) ------------------------------
+  // Obligation without a usable action verb and without parameters is often
+  // a fragment ("The system shall.").
+  const action = req.action ?? req.semantics?.action;
+  if (hasObligation(req) && (!action || action.length < 3) && parametersOf(req).length === 0) {
     findings.push(
       createFinding({
         requirement_id: req.id,

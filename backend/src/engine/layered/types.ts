@@ -12,6 +12,58 @@ export type CanonicalRequirementType =
   | "General"
   | "Unknown";
 
+export type ComparisonOperator = "<" | "<=" | ">" | ">=" | "=";
+
+/** First-class measurable claim produced by the L0 semantic parser. */
+export interface RequirementParameter {
+  parameter: string;
+  operator: ComparisonOperator;
+  value: number;
+  unit?: string;
+  evidence_span?: string;
+}
+
+export type ObligationVerb = "shall" | "must" | "should" | "may" | "could" | "might";
+
+export type VerificationSignalKind =
+  | "measurement"
+  | "test"
+  | "inspection"
+  | "analysis"
+  | "observable"
+  | "referenced";
+
+/** How the requirement can be observed or tested. */
+export interface VerificationSignal {
+  kind: VerificationSignalKind;
+  name: string;
+  evidence_span?: string;
+}
+
+/**
+ * Single semantic frame for a requirement. Built once by semanticParse.ts.
+ *
+ * Requirement text
+ *        ↓
+ * semanticParse.ts
+ *        ↓
+ * RequirementSemanticFrame
+ */
+export interface RequirementSemanticFrame {
+  actor?: string;
+  obligation?: ObligationVerb;
+  polarity: "required" | "prohibited" | "allowed" | "unknown";
+  action?: string;
+  /** Specific entity, item, or parameter being acted upon by the system or subject. */
+  object?: string;
+  conditions: string[];
+  modes: string[];
+  states: string[];
+  parameters: RequirementParameter[];
+  verification_signals: VerificationSignal[];
+}
+
+/** @deprecated Prefer RequirementParameter. Kept for older findings/tests. */
 export interface ThresholdSpec {
   value: string;
   unit?: string;
@@ -26,10 +78,22 @@ export interface CanonicalRequirement {
 
   type: CanonicalRequirementType;
 
+  /** Parsed once in normalizeCanonical. Absent only on hand-built test fixtures. */
+  semantics?: RequirementSemanticFrame;
+
   actor?: string;
+  obligation?: ObligationVerb;
+  polarity?: "required" | "prohibited" | "allowed" | "unknown";
   action?: string;
+  /** Specific entity, item, or parameter being acted upon by the system or subject. */
   object?: string;
   conditions?: string[];
+  modes?: string[];
+  states?: string[];
+  /** Same objects as `semantics.parameters` (first-class parameters). */
+  parameters?: RequirementParameter[];
+  verification_signals?: VerificationSignal[];
+  /** Derived from `semantics.parameters` when normalized. */
   thresholds?: ThresholdSpec[];
 
   tags?: string[];
@@ -85,38 +149,54 @@ export interface LegacyReconstructionResult {
   formal_rewrite?: string;
 }
 
-export interface RequirementScores {
-  unambiguous: number;
-  complete: number;
-  verifiable: number;
-  singular: number;
-  consistent_correct: number;
-  overall: number;
+/** Cell of the quality matrix. 0 missed, 1 partial, 2 met. */
+export type QualityScore = 0 | 1 | 2;
+
+/**
+ * Pass 1 row. `maturity` is the minimum cell.
+ * `quality_score` is q_i, the row of Q as a percentage of its maximum (each raw cell tops out at 2).
+ * `weight` is 1, or the safety-critical weight when the requirement is explicitly labeled.
+ */
+export interface QualityVector {
+  necessary: QualityScore;
+  unambiguous: QualityScore;
+  complete: QualityScore;
+  feasible: QualityScore;
+  verifiable: QualityScore;
+  maturity: QualityScore;
+  /** q_i = (sum_j Q_ij / (2 * sum_j W_ij)) * 100. Range 0–100. */
+  quality_score: number;
+  safety_critical: boolean;
+  weight: number;
 }
 
-export interface RequirementSemanticMeta {
-  cluster_id: number;
-  embedding_model?: string;
+/**
+ * Pass 2. The four checks are the document row.
+ * Weighted feasibility and verifiability are the matching columns of Q divided by the columns of W.
+ * `system_maturity_index` is the mean of the per-requirement quality scores.
+ * `defect_profile` is the column means of the raw matrix R.
+ */
+export interface DocumentMaturity {
+  completeness: QualityScore;
+  consistency: QualityScore;
+  bounded: QualityScore;
+  feasible: QualityScore;
+  maturity: QualityScore;
+  weighted_feasibility: number;
+  weighted_verifiability: number;
+  safety_critical_weight: number;
+  safety_critical_count: number;
+  /** M_sys = (1/n) sum q_i. Range 0–100. */
+  system_maturity_index: number;
+  /** d = (1/n) sum r_i. Order: necessary, unambiguous, complete, feasible, verifiable. Each mean is 0–2. */
+  defect_profile: number[];
 }
 
 export interface PerRequirementResult {
   requirement: CanonicalRequirement;
   findings: StructuredFinding[];
-  scores: RequirementScores;
+  scores: QualityVector;
   legacy?: LegacyReconstructionResult;
-  /** Present when semantic embedding layer ran for this analysis. */
-  semantic?: RequirementSemanticMeta;
-}
-
-export interface SemanticEmbeddingMeta {
-  enabled: boolean;
-  skipped_reason?: string;
-  model?: string;
-  dimensions?: number;
-  cluster_count?: number;
-  neighbor_pair_count?: number;
-  intra_prefilter_applied?: boolean;
-  hierarchy_embedding_boost?: boolean;
 }
 
 export interface LayeredContradictionMeta {
@@ -141,17 +221,21 @@ export interface LayeredAnalysisMeta {
   source_document?: string;
   /** Display name for the parent specification when parent–child analysis ran, e.g. parent upload filename. */
   parent_source_document?: string;
-  ai_enabled: boolean;
   organization_id?: string;
   contradiction?: LayeredContradictionMeta;
-  /** Embedding-based clustering / contradiction pre-filter telemetry */
-  semantic_embedding?: SemanticEmbeddingMeta;
 }
 
 export interface LayeredAnalysisResult {
   meta: LayeredAnalysisMeta;
   requirements: PerRequirementResult[];
   set_level_findings: StructuredFinding[];
+  /** R, n×5 raw scores: necessary, unambiguous, complete, feasible, verifiable. */
+  quality_matrix: number[][];
+  /** W, n×5. Safety-critical rows use the safety weight on feasible and verifiable. */
+  weight_matrix: number[][];
+  /** Q = R × W, same shape as R. */
+  weighted_evaluation_matrix: number[][];
+  document_maturity: DocumentMaturity;
   /** Present when a parent specification was analyzed (for hierarchy findings UI). */
   parent_requirements?: CanonicalRequirement[];
 }
@@ -173,9 +257,4 @@ export interface EngineRunOptions {
   parent_source_document?: string;
   /** Explicit parent/child ID links when both documents use the same id scheme. */
   trace_links?: TraceLinkInput[];
-  /**
-   * Prepended to every layered LLM system prompt (after loading from `data/ai-training-pack.json` or UI).
-   * Used for proprietary layout steering — not fine-tuning.
-   */
-  ai_organization_context?: string;
 }

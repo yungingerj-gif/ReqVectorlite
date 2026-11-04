@@ -1,19 +1,43 @@
+/**
+ * Unambiguous quality rule (INCOSE-style).
+ *
+ * A requirement is unambiguous when a competent reader would interpret the
+ * same mandatory behavior. Vague adjectives, banned vocabulary, and weak
+ * modals leave the statement open to negotiation instead of verification.
+ *
+ * Dictionaries come from engine config (organization-editable):
+ * - `dictionaries.vague_terms` — multi-word phrases or single tokens
+ * - `dictionaries.banned_terms` — organization-forbidden wording
+ * - `dictionaries.weak_modals` — typically should / may / could / might
+ *
+ * Matching: multi-word vague terms are substring (case-insensitive);
+ * single-word vague terms and weak modals are whole-word so "may" does not
+ * hit "maybe" incorrectly beyond `\b` (and "information" is not "or").
+ *
+ * Findings use attribute `"Unambiguous"`.
+ */
 import type { CanonicalRequirement, StructuredFinding } from "../types";
 import { createFinding } from "./newFinding";
 import type { DeterministicContext } from "./ruleContext";
 
+/** Registry / profile id for this quality block. */
 export const BLOCK_ID = "deterministic.unambiguous";
 
+/** Case-insensitive substring match (used for phrases and banned terms). */
 function containsPhrase(haystack: string, needle: string): boolean {
   const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(esc, "i").test(haystack);
 }
 
+/** Case-insensitive whole-word match (used for single-token dictionary hits). */
 function containsWholeWord(haystack: string, word: string): boolean {
   const re = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
   return re.test(haystack);
 }
 
+/**
+ * Scan one requirement against vague, banned, and weak-modal dictionaries.
+ */
 export function runUnambiguous(
   req: CanonicalRequirement,
   ctx: DeterministicContext
@@ -22,6 +46,9 @@ export function runUnambiguous(
   const text = req.normalized_text;
   const lower = text.toLowerCase();
 
+  // --- Dictionary scan ------------------------------------------------------
+  // Collect hits first so one finding lists all offending terms rather than
+  // emitting one finding per word.
   const vagueHits: string[] = [];
   for (const term of ctx.config.dictionaries.vague_terms) {
     if (term.includes(" ")) {
@@ -37,6 +64,9 @@ export function runUnambiguous(
     }
   }
 
+  // --- Rule: vague_or_subjective_language (high) ----------------------------
+  // Subjective or non-measurable wording ("quickly", "user friendly") cannot
+  // be a pass/fail criterion until replaced with an objective limit or state.
   if (vagueHits.length > 0) {
     findings.push(
       createFinding({
@@ -54,6 +84,9 @@ export function runUnambiguous(
     );
   }
 
+  // --- Rule: weak_modal (medium) --------------------------------------------
+  // should/may/could/might are allowed language for goals, not for binding
+  // product requirements. Suggest promoting to shall.
   const weakHits = ctx.config.dictionaries.weak_modals.filter((w) => containsWholeWord(lower, w));
   if (weakHits.length > 0) {
     findings.push(

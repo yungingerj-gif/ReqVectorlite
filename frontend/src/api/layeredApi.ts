@@ -10,8 +10,6 @@ export async function analyzeLayered(body: {
   parent_raw_text?: string;
   parent_source_document?: string;
   trace_links?: Array<{ parent_requirement_id: string; child_requirement_id: string }>;
-  /** Enables server LLM pass for same-intent cross-requirement pairs (requires API key on server). */
-  same_intent_llm?: boolean;
 }): Promise<LayeredAnalysisResult> {
   const res = await fetch(apiUrl("/api/layered/analyze"), {
     method: "POST",
@@ -22,13 +20,19 @@ export async function analyzeLayered(body: {
   return res.json() as Promise<LayeredAnalysisResult>;
 }
 
-export async function analyzeLayeredUpload(fd: FormData): Promise<LayeredAnalysisResult> {
+export async function analyzeLayeredUpload(fd: FormData): Promise<{
+  result: LayeredAnalysisResult;
+  sourceExtract: string;
+}> {
   const res = await fetch(apiUrl("/api/layered/analyze-upload"), {
     method: "POST",
     body: fd,
   });
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
-  return res.json() as Promise<LayeredAnalysisResult>;
+  const body = (await res.json()) as LayeredAnalysisResult & { source_extract?: string };
+  const sourceExtract = typeof body.source_extract === "string" ? body.source_extract : "";
+  delete body.source_extract;
+  return { result: body, sourceExtract };
 }
 
 export async function exportLayeredDocx(result: LayeredAnalysisResult): Promise<Blob> {
@@ -45,48 +49,6 @@ export async function getLayeredEngineConfig(): Promise<Record<string, unknown>>
   const res = await fetch(apiUrl("/api/layered/config"));
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
   return res.json() as Promise<Record<string, unknown>>;
-}
-
-/** Layered LLM prompt steering pack (server file `backend/data/ai-training-pack.json`). */
-export interface AiTrainingPackDto {
-  updated_at: string;
-  global_llm_instructions?: string;
-  examples: AiTrainingExampleDto[];
-}
-
-export interface AiTrainingExampleDto {
-  id: string;
-  layout_label: string;
-  layout_notes: string;
-  excerpt: string;
-  guidance_for_llm?: string;
-  enabled: boolean;
-}
-
-export async function getAiTrainingPack(): Promise<AiTrainingPackDto> {
-  const res = await fetch(apiUrl("/api/layered/ai-training-pack"));
-  if (!res.ok) throw new Error((await res.text()) || res.statusText);
-  return res.json() as Promise<AiTrainingPackDto>;
-}
-
-export async function saveAiTrainingPack(body: {
-  global_llm_instructions?: string;
-  examples: AiTrainingExampleDto[];
-}): Promise<AiTrainingPackDto> {
-  const res = await fetch(apiUrl("/api/layered/ai-training-pack"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error((await res.text()) || res.statusText);
-  return res.json() as Promise<AiTrainingPackDto>;
-}
-
-/** JSONL derived from the steering pack (auto-written on save to `backend/data/ai-training-steering.jsonl`). */
-export async function fetchSteeringTrainingJsonl(): Promise<Blob> {
-  const res = await fetch(apiUrl("/api/layered/ai-training-steering.jsonl"));
-  if (!res.ok) throw new Error((await res.text()) || res.statusText);
-  return res.blob();
 }
 
 /** Quantities / units library (`backend/data/domain-constraints.json`). */

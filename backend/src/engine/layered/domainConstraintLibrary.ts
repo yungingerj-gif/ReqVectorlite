@@ -4,7 +4,6 @@ import { randomUUID } from "crypto";
 
 /**
  * Domain quantities / units the org cares about (speed, torque, current, …).
- * Injected into layered LLM organization context for consistent interpretation.
  */
 export interface DomainConstraintEntry {
   id: string;
@@ -23,7 +22,7 @@ export interface DomainConstraintEntry {
 
 export interface DomainConstraintLibrary {
   updated_at: string;
-  /** Short preamble for the LLM block */
+  /** Short description of this quantity and unit library */
   summary?: string;
   constraints: DomainConstraintEntry[];
 }
@@ -34,7 +33,6 @@ const MAX_CANONICAL_UNIT = 80;
 const MAX_SYNONYM = 80;
 const MAX_ALTERNATE = 40;
 const MAX_NOTES = 2000;
-const MAX_PROMPT_CHARS = 7000;
 
 export function domainConstraintsPath(): string {
   return path.join(process.cwd(), "data", "domain-constraints.json");
@@ -120,61 +118,4 @@ export function saveDomainConstraintLibrary(lib: DomainConstraintLibrary): void 
   const s = lib.summary?.trim();
   if (s) out.summary = s.slice(0, MAX_SUMMARY);
   fs.writeFileSync(p, JSON.stringify(out, null, 2), "utf8");
-}
-
-export function formatDomainConstraintsForPrompt(lib: DomainConstraintLibrary): string {
-  const summary = lib.summary?.trim() ?? "";
-  const enabled = lib.constraints.filter((c) => {
-    if (!c.enabled) return false;
-    return c.label.trim().length > 0 && c.canonical_unit.trim().length > 0;
-  });
-  if (!summary && enabled.length === 0) return "";
-
-  const blocks: string[] = [
-    "DOMAIN CONSTRAINT LIBRARY — quantities and preferred units (interpretation only; not extra requirements).",
-    "When requirements mention these concepts, prefer the canonical unit and treat synonyms as the same quantity unless the spec explicitly distinguishes them.",
-    "",
-  ];
-  let total = blocks.join("\n").length;
-
-  if (summary) {
-    const line = `### Scope\n${summary}`;
-    blocks.push(line);
-    blocks.push("");
-    total += line.length + 2;
-  }
-
-  if (enabled.length > 0) {
-    blocks.push("### Quantities");
-    blocks.push("");
-    total += "### Quantities\n\n".length;
-
-    for (let i = 0; i < enabled.length; i++) {
-      const c = enabled[i]!;
-      const alt =
-        c.alternate_units?.filter(Boolean).length ? `Also seen as: ${c.alternate_units!.join(", ")}.` : "";
-      const syn = c.synonyms?.filter(Boolean).length ? `Synonyms / phrases: ${c.synonyms!.join("; ")}.` : "";
-      const notes = c.notes_for_llm?.trim() ? `Notes: ${c.notes_for_llm.trim()}` : "";
-      const cat = c.category?.trim() ? `[${c.category.trim()}] ` : "";
-      const piece = [
-        `#### ${i + 1}. ${cat}${c.label.trim()}`,
-        `Canonical unit: ${c.canonical_unit.trim()}`,
-        alt,
-        syn,
-        notes,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      if (total + piece.length + 2 > MAX_PROMPT_CHARS) {
-        blocks.push("[Additional domain constraints omitted — shorten the library in Domain constraints.]");
-        break;
-      }
-      blocks.push(piece);
-      blocks.push("");
-      total += piece.length + 2;
-    }
-  }
-
-  return blocks.join("\n").trim();
 }

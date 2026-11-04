@@ -6,7 +6,8 @@ const OVERRIDE_KEY = "layered-config-override-v1";
 const BLOCK_LABELS: Record<string, string> = {
   "deterministic.unambiguous": "Unambiguous",
   "deterministic.complete": "Complete",
-  "deterministic.verifiable": "Verifiable",
+  "deterministic.verifiable": "Verifiable (legacy id)",
+  "verification.analysis": "Verification analysis",
   "deterministic.singular": "Singular",
   "deterministic.consistent_correct": "Consistent",
   "setLevel.cross_requirement": "Set-level / cross-requirement",
@@ -14,7 +15,7 @@ const BLOCK_LABELS: Record<string, string> = {
   "contradiction.parent_child": "Parent–child contradiction",
 };
 
-const DISABLED_BLOCKS = new Set(["ai.attribute_analysis", "legacy.reconstruction"]);
+const DISABLED_BLOCKS = new Set(["legacy.reconstruction", "contradiction.parent_child", "ai.attribute_analysis"]);
 
 function loadOverride(): Record<string, unknown> {
   try {
@@ -36,10 +37,13 @@ function mergeServerWithOverride(server: Record<string, unknown>): Record<string
     ...((server.rule_block_registry as Record<string, boolean>) || {}),
     ...((o.rule_block_registry as Record<string, boolean>) || {}),
   };
-  const weights = {
-    ...((server.scoring_weights as Record<string, number>) || {}),
-    ...((o.scoring_weights as Record<string, number>) || {}),
-  };
+  delete reg["ai.attribute_analysis"];
+  const safety_critical_weight =
+    typeof o.safety_critical_weight === "number"
+      ? o.safety_critical_weight
+      : typeof server.safety_critical_weight === "number"
+        ? server.safety_critical_weight
+        : 2;
   const dServer = (server.dictionaries as Record<string, unknown>) || {};
   const dOver = (o.dictionaries as Record<string, unknown>) || {};
   const dictionaries = {
@@ -53,7 +57,7 @@ function mergeServerWithOverride(server: Record<string, unknown>): Record<string
       (dServer.terminology_synonym_groups as string[][]) ??
       [],
   };
-  return { ...server, rule_block_registry: reg, scoring_weights: weights, dictionaries };
+  return { ...server, rule_block_registry: reg, safety_critical_weight, dictionaries };
 }
 
 export function ConfigPanel() {
@@ -76,11 +80,6 @@ export function ConfigPanel() {
     return Object.keys(draft.rule_block_registry as object).sort();
   }, [draft]);
 
-  const weightKeys = useMemo(() => {
-    if (!draft?.scoring_weights) return [] as string[];
-    return Object.keys(draft.scoring_weights as object).sort();
-  }, [draft]);
-
   if (configLoadError && !draft) {
     return (
       <section className="lv-panel">
@@ -101,7 +100,7 @@ export function ConfigPanel() {
   }
 
   const reg = (draft.rule_block_registry as Record<string, boolean>) || {};
-  const weights = (draft.scoring_weights as Record<string, number>) || {};
+  const safetyWeight = Number(draft.safety_critical_weight ?? 2);
   const dicts = (draft.dictionaries as Record<string, unknown>) || {};
   const vagueTerms = (dicts.vague_terms as string[]) || [];
   const bannedTerms = (dicts.banned_terms as string[]) || [];
@@ -119,22 +118,11 @@ export function ConfigPanel() {
     );
   };
 
-  const setWeight = (key: string, n: number) => {
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            scoring_weights: { ...(d.scoring_weights as object), [key]: n },
-          }
-        : d
-    );
-  };
-
   const saveProfile = () => {
     if (!draft) return;
     saveOverride({
       rule_block_registry: draft.rule_block_registry,
-      scoring_weights: draft.scoring_weights,
+      safety_critical_weight: draft.safety_critical_weight,
       dictionaries: draft.dictionaries,
     });
     setSaveMsg("Saved to this browser (local only). The API still uses server layered-engine.json until a save endpoint exists.");
@@ -146,7 +134,7 @@ export function ConfigPanel() {
       <h2 className="lv-h2">Configurable profiles</h2>
       <p className="lv-muted">
         Edit rule blocks, weights, and dictionaries. Changes are stored locally and do not change the running server
-        configuration. AI and legacy reconstruction blocks cannot be enabled on this branch.
+        configuration.
       </p>
 
       <div className="lv-config-section">
@@ -164,20 +152,23 @@ export function ConfigPanel() {
       </div>
 
       <div className="lv-config-section">
-        <h3 className="lv-h3">Scoring weights</h3>
-        <div className="lv-weights-grid">
-          {weightKeys.map((key) => (
-            <label key={key} className="lv-weight-field">
-              {key}
-              <input
-                type="number"
-                step={0.1}
-                value={weights[key] ?? 0}
-                onChange={(e) => setWeight(key, Number(e.target.value))}
-              />
-            </label>
-          ))}
-        </div>
+        <h3 className="lv-h3">Safety-critical weight</h3>
+        <p className="lv-muted">
+          Multiplies feasibility and verifiability when a requirement is explicitly labeled safety-critical, SIL, or ASIL.
+          The 0–2 cells themselves do not change.
+        </p>
+        <label className="lv-weight-field">
+          Weight
+          <input
+            type="number"
+            min={1}
+            step={0.5}
+            value={safetyWeight}
+            onChange={(e) =>
+              setDraft((d) => (d ? { ...d, safety_critical_weight: Math.max(1, Number(e.target.value) || 1) } : d))
+            }
+          />
+        </label>
       </div>
 
       <div className="lv-config-section">

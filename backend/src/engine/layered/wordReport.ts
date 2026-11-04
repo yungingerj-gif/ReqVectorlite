@@ -54,10 +54,13 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
     children: [
       cell("Req ID"),
       cell("Normalized text"),
-      cell("Overall"),
+      cell("Maturity"),
+      cell("Necessary"),
       cell("Unamb."),
       cell("Complete"),
+      cell("Feasible"),
       cell("Verif."),
+      cell("Quality %"),
     ],
   });
 
@@ -67,10 +70,13 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
         children: [
           cell(r.requirement.id),
           cell(r.requirement.normalized_text),
-          cell(String(r.scores.overall)),
+          cell(String(r.scores.maturity)),
+          cell(String(r.scores.necessary)),
           cell(String(r.scores.unambiguous)),
           cell(String(r.scores.complete)),
+          cell(String(r.scores.feasible)),
           cell(String(r.scores.verifiable)),
+          cell(typeof r.scores.quality_score === "number" ? `${r.scores.quality_score}%` : ""),
         ],
       })
   );
@@ -126,7 +132,7 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
     new Paragraph({ text: "Executive summary", heading: HeadingLevel.HEADING_1 }),
     new Paragraph({
       children: [
-        new TextRun(`Total findings (incl. set-level): ${allFindings.length}. AI enabled: ${result.meta.ai_enabled ? "yes" : "no"}.`),
+        new TextRun(`Total findings (incl. set-level): ${allFindings.length}.`),
       ],
     }),
     new Paragraph({ text: "Findings by severity", heading: HeadingLevel.HEADING_2 }),
@@ -134,6 +140,22 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
     new Paragraph({ text: "Findings by attribute", heading: HeadingLevel.HEADING_2 }),
     ...attrParagraphs,
     new Paragraph({ text: "Scorecard", heading: HeadingLevel.HEADING_1 }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: "System maturity index: ", bold: true }),
+        new TextRun(
+          typeof result.document_maturity.system_maturity_index === "number"
+            ? `${result.document_maturity.system_maturity_index}%`
+            : "—"
+        ),
+      ],
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({ text: "Defect profile (necessary, unambiguous, complete, feasible, verifiable): ", bold: true }),
+        new TextRun((result.document_maturity.defect_profile ?? []).join(", ")),
+      ],
+    }),
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [tableHeader, ...scoreRows],

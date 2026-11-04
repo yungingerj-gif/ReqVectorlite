@@ -1,13 +1,13 @@
 /**
- * Layered requirements engine — HTTP API (normalize → deterministic rules → scoring).
- * AI and legacy reconstruction are not available in this build.
+ * Layered requirements engine — HTTP API (single specification / intra only).
+ * Legacy reconstruction and parent–child hierarchy are not available in this build.
  *
  * Endpoints (prefix `/api` when mounted):
  * - `GET /layered/health` — engine identity and layer checklist.
  * - `GET /layered/config` — read-only engine configuration for dashboards.
- * - `GET|POST /layered/domain-constraints` — quantity/unit hints for deterministic checks.
- * - `POST /layered/analyze` — JSON body with `rawText`, profile, optional parent doc and trace links.
- * - `POST /layered/analyze-upload` — multipart `file` (+ optional `parent_file`) with form fields.
+ * - `GET|POST /layered/domain-constraints` — quantity/unit library stored on the server.
+ * - `POST /layered/analyze` — JSON body with `rawText` for one specification.
+ * - `POST /layered/analyze-upload` — multipart `file` for one specification.
  * - `POST /layered/export/analysis-docx` — Word report from a prior `LayeredAnalysisResult`.
  * - `POST /layered/export/revised-source` — apply text replacements to an uploaded source file.
  *
@@ -77,8 +77,6 @@ const analyzeSchema = z.object({
   /** Display label for the parent document (e.g. filename) when using inline parent_raw_text. */
   parent_source_document: z.string().optional(),
   trace_links: z.array(traceLinkSchema).max(2000).optional(),
-  /** Ignored. This build does not run LLM passes. */
-  same_intent_llm: z.boolean().optional(),
 });
 
 const exportSchema = z.object({
@@ -126,16 +124,17 @@ router.get("/layered/health", (_req, res) => {
     status: "ok",
     engine: "layered-requirements-mvp",
     layers: [
-      "L0_normalize",
-      "L1_deterministic",
-      "L3_scoring",
-      "L5_set_level",
-      "L6_contradiction",
-      "L7_config",
+      "semantic_parse",
+      "normalize_canonical",
+      "quality_rules",
+      "cross_set_analysis",
+      "contradiction_engine",
+      "verification_analysis",
+      "scoring",
     ],
     profiles: ["default_active_spec"],
-    ai_enablement: false,
     review_mode: "active_spec_rules_only",
+    specification_scope: "intra",
   });
 });
 
@@ -190,7 +189,7 @@ router.post("/layered/domain-constraints", validateBody(domainConstraintsPostSch
   }
 });
 
-/** `POST /api/layered/analyze` — runs {@link runLayeredEngine} on inline text with optional parent/trace metadata. */
+/** `POST /api/layered/analyze` — runs {@link runLayeredEngine} on a single specification. */
 router.post("/layered/analyze", validateBody(analyzeSchema), async (req, res, next) => {
   try {
     const body = req.body as z.infer<typeof analyzeSchema>;
@@ -202,13 +201,6 @@ router.post("/layered/analyze", validateBody(analyzeSchema), async (req, res, ne
         profile: "default_active_spec",
         mode: "active",
         parseOptions: body.options ?? {},
-        ...(body.parent_raw_text?.trim()
-          ? { parent_raw_text: body.parent_raw_text.trim() }
-          : {}),
-        ...(body.parent_source_document?.trim()
-          ? { parent_source_document: body.parent_source_document.trim() }
-          : {}),
-        ...(body.trace_links && body.trace_links.length > 0 ? { trace_links: body.trace_links } : {}),
       },
       config
     );
@@ -219,13 +211,12 @@ router.post("/layered/analyze", validateBody(analyzeSchema), async (req, res, ne
 });
 
 /**
- * `POST /api/layered/analyze-upload` — multipart primary `file` plus optional `parent_file` and string fields (`profile`, `mode`, `trace_links` JSON, etc.).
+ * `POST /api/layered/analyze-upload` — multipart primary `file` (single specification).
  */
 router.post(
   "/layered/analyze-upload",
   upload.fields([
     { name: "file", maxCount: 1 },
-    { name: "parent_file", maxCount: 1 },
   ]),
   async (req, res, next) => {
   try {
@@ -251,53 +242,6 @@ router.post(
     }
 
     const config = loadEngineConfig();
-    const parentMulter = files?.parent_file?.[0];
-    let parentRaw: string | undefined;
-    let parent_source_document: string | undefined;
-    if (parentMulter?.buffer) {
-      const extracted = await extractTextForLayered({
-        buffer: parentMulter.buffer,
-        mimetype: parentMulter.mimetype,
-        originalname: parentMulter.originalname,
-      });
-      if (extracted.text.trim()) {
-        parentRaw = extracted.text.trim();
-        parent_source_document = extracted.source_document;
-      }
-    }
-    if (!parentRaw) {
-      parentRaw =
-        typeof req.body?.parent_raw_text === "string" && req.body.parent_raw_text.trim().length > 0
-          ? req.body.parent_raw_text.trim()
-          : undefined;
-    }
-    if (parentRaw && !parent_source_document) {
-      const psd =
-        typeof req.body?.parent_source_document === "string" ? req.body.parent_source_document.trim() : "";
-      if (psd) parent_source_document = psd;
-    }
-    let trace_links:
-      | Array<{ parent_requirement_id: string; child_requirement_id: string }>
-      | undefined;
-    if (typeof req.body?.trace_links === "string" && req.body.trace_links.trim()) {
-      try {
-        const parsed = JSON.parse(req.body.trace_links) as unknown;
-        if (Array.isArray(parsed)) {
-          trace_links = parsed
-            .filter(
-              (x): x is { parent_requirement_id: string; child_requirement_id: string } =>
-                Boolean(x) &&
-                typeof x === "object" &&
-                typeof (x as { parent_requirement_id?: string }).parent_requirement_id === "string" &&
-                typeof (x as { child_requirement_id?: string }).child_requirement_id === "string"
-            )
-            .slice(0, 2000);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
     const result = await runLayeredEngine(
       {
         rawText: text,
@@ -305,21 +249,10 @@ router.post(
         profile,
         mode,
         parseOptions: {},
-        ...(parentRaw ? { parent_raw_text: parentRaw } : {}),
-        ...(parent_source_document ? { parent_source_document } : {}),
-        ...(trace_links && trace_links.length > 0 ? { trace_links } : {}),
       },
       config
     );
-    if (result.meta.contradiction) {
-      const parentBytes = Boolean(parentMulter?.buffer && parentMulter.buffer.length > 0);
-      result.meta.contradiction = {
-        ...result.meta.contradiction,
-        ...(parentBytes ? { parent_file_in_request: true } : {}),
-        ...(parentBytes && !parentRaw ? { parent_extraction_failed: true } : {}),
-      };
-    }
-    res.json(result);
+    res.json({ ...result, source_extract: text });
   } catch (e) {
     next(e);
   }

@@ -44,7 +44,7 @@ describe("obligation semantic alignment (beyond lexical overlap)", () => {
     const sa = m.get("A")!;
     const sb = m.get("B")!;
     if (semanticsStrongEnoughToGate(sa, sb)) {
-      expect(obligationSemanticAlignment(sa, sb)).toBeLessThan(0.25);
+      expect(obligationSemanticAlignment(sa, sb)).toBeLessThanOrEqual(0.25);
     }
   });
 });

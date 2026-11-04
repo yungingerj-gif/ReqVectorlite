@@ -1523,6 +1523,10 @@ label.inline {
   max-width: 1400px;
 }
 
+.lv-page-wide {
+  max-width: none;
+}
+
 .lv-h1 {
   margin: 0;
   font-size: 1.35rem;
@@ -2793,6 +2797,112 @@ label.inline {
 
 .lv-review-export .lv-h2 {
   margin-bottom: 0.5rem;
+}
+
+.lv-port-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-top: 0.85rem;
+}
+
+.lv-port-row .lv-hint {
+  margin: 0;
+  flex: 1;
+  min-width: 16rem;
+}
+
+.lv-trace-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.lv-trace-filter {
+  min-width: min(100%, 22rem);
+  margin: 0;
+}
+
+.lv-trace-filter input[type="search"] {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(2, 6, 23, 0.65);
+  color: #e5e7eb;
+  font: inherit;
+}
+
+.lv-trace-count {
+  margin: 0;
+}
+
+.lv-trace-scroll {
+  max-height: calc(100vh - 16rem);
+}
+
+.lv-trace-table {
+  min-width: 92rem;
+}
+
+.lv-trace-table tbody tr {
+  cursor: default;
+}
+
+.lv-trace-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #111827;
+  white-space: nowrap;
+}
+
+.lv-trace-table th:first-child,
+.lv-trace-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #0b1220;
+}
+
+.lv-trace-table th:first-child {
+  z-index: 3;
+  background: #111827;
+}
+
+.lv-trace-statement {
+  min-width: 18rem;
+  max-width: 28rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.lv-trace-criteria {
+  min-width: 12rem;
+  max-width: 22rem;
+  white-space: normal;
+}
+
+.lv-trace-input {
+  width: 100%;
+  min-width: 8rem;
+  box-sizing: border-box;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(2, 6, 23, 0.65);
+  color: #e5e7eb;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.lv-trace-input:focus {
+  outline: 2px solid rgba(96, 165, 250, 0.7);
+  outline-offset: 1px;
 }
 
 .lv-accepted-banner {

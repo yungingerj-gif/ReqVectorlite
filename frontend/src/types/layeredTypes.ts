@@ -9,10 +9,48 @@ export interface CanonicalRequirement {
   explicit_id: boolean;
   type: string;
   actor?: string;
+  obligation?: string;
+  polarity?: string;
   action?: string;
   object?: string;
   conditions?: string[];
+  modes?: string[];
+  states?: string[];
+  parameters?: Array<{
+    parameter: string;
+    operator: "<" | "<=" | ">" | ">=" | "=";
+    value: number;
+    unit?: string;
+    evidence_span?: string;
+  }>;
+  verification_signals?: Array<{
+    kind: string;
+    name: string;
+    evidence_span?: string;
+  }>;
   thresholds?: Array<{ value: string; unit?: string; comparator?: string }>;
+  semantics?: {
+    actor?: string;
+    obligation?: string;
+    polarity?: string;
+    action?: string;
+    object?: string;
+    conditions: string[];
+    modes: string[];
+    states: string[];
+    parameters: Array<{
+      parameter: string;
+      operator: "<" | "<=" | ">" | ">=" | "=";
+      value: number;
+      unit?: string;
+      evidence_span?: string;
+    }>;
+    verification_signals: Array<{
+      kind: string;
+      name: string;
+      evidence_span?: string;
+    }>;
+  };
   tags?: string[];
 }
 
@@ -32,13 +70,35 @@ export interface StructuredFinding {
   related_requirement_ids?: string[];
 }
 
-export interface RequirementScores {
-  unambiguous: number;
-  complete: number;
-  verifiable: number;
-  singular: number;
-  consistent_correct: number;
-  overall: number;
+export type QualityScore = 0 | 1 | 2;
+
+export interface QualityVector {
+  necessary: QualityScore;
+  unambiguous: QualityScore;
+  complete: QualityScore;
+  feasible: QualityScore;
+  verifiable: QualityScore;
+  maturity: QualityScore;
+  /** q_i, 0–100. Row sum of Q divided by the maximum weighted row. */
+  quality_score: number;
+  safety_critical: boolean;
+  weight: number;
+}
+
+export interface DocumentMaturity {
+  completeness: QualityScore;
+  consistency: QualityScore;
+  bounded: QualityScore;
+  feasible: QualityScore;
+  maturity: QualityScore;
+  weighted_feasibility: number;
+  weighted_verifiability: number;
+  safety_critical_weight: number;
+  safety_critical_count: number;
+  /** M_sys, mean of q_i, 0–100. */
+  system_maturity_index: number;
+  /** Column means of R. Order: necessary, unambiguous, complete, feasible, verifiable. */
+  defect_profile: number[];
 }
 
 export interface LegacyReconstructionResult {
@@ -56,21 +116,8 @@ export interface LegacyReconstructionResult {
 export interface PerRequirementResult {
   requirement: CanonicalRequirement;
   findings: StructuredFinding[];
-  scores: RequirementScores;
+  scores: QualityVector;
   legacy?: LegacyReconstructionResult;
-  /** Semantic embedding cluster (backend `embedding_enabled` + successful API call). */
-  semantic?: { cluster_id: number; embedding_model?: string };
-}
-
-export interface SemanticEmbeddingMeta {
-  enabled: boolean;
-  skipped_reason?: string;
-  model?: string;
-  dimensions?: number;
-  cluster_count?: number;
-  neighbor_pair_count?: number;
-  intra_prefilter_applied?: boolean;
-  hierarchy_embedding_boost?: boolean;
 }
 
 export interface LayeredContradictionMeta {
@@ -91,12 +138,14 @@ export interface LayeredAnalysisResult {
     requirement_count: number;
     source_document?: string;
     parent_source_document?: string;
-    ai_enabled: boolean;
     organization_id?: string;
     contradiction?: LayeredContradictionMeta;
-    semantic_embedding?: SemanticEmbeddingMeta;
   };
   requirements: PerRequirementResult[];
   set_level_findings: StructuredFinding[];
+  quality_matrix: number[][];
+  weight_matrix: number[][];
+  weighted_evaluation_matrix: number[][];
+  document_maturity: DocumentMaturity;
   parent_requirements?: CanonicalRequirement[];
 }

@@ -41,7 +41,6 @@ export function RequirementsTable() {
   }
 
   const docName = analysisResult.meta.source_document?.trim();
-  const showCluster = Boolean(analysisResult.meta.semantic_embedding?.enabled);
 
   return (
     <section className="lv-panel lv-table-panel">
@@ -65,13 +64,13 @@ export function RequirementsTable() {
               {header("id", "ID")}
               {header("text", "Requirement text")}
               {header("type", "Type")}
-              {showCluster ? header("cluster", "Fn cluster") : null}
+              {header("necessary", "Necessary")}
               {header("unambiguous", "Unambiguous")}
               {header("complete", "Complete")}
+              {header("feasible", "Feasible")}
               {header("verifiable", "Verifiable")}
-              {header("singular", "Singular")}
-              {header("consistent_correct", "Consistent")}
-              {header("overall", "Overall")}
+              {header("maturity", "Maturity")}
+              {header("qualityScore", "Quality %")}
               {header("topIssue", "Top issue")}
             </tr>
           </thead>
@@ -96,20 +95,13 @@ export function RequirementsTable() {
                 >
                   <td>
                     <code>{r.id}</code>
+                    {scores.safety_critical ? " SC" : ""}
                   </td>
                   <td className="lv-td-text">{r.source_text}</td>
                   <td>{r.type}</td>
-                  {showCluster ? (
-                    <td>
-                      {row.semantic != null ? (
-                        <span className="lv-cluster-badge" title={row.semantic.embedding_model ?? "embedding"}>
-                          {row.semantic.cluster_id}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  ) : null}
+                  <td>
+                    <span className={`lv-score-badge ${scoreBadgeClass(scores.necessary)}`}>{scores.necessary}</span>
+                  </td>
                   <td>
                     <span className={`lv-score-badge ${scoreBadgeClass(scores.unambiguous)}`}>
                       {scores.unambiguous}
@@ -119,21 +111,17 @@ export function RequirementsTable() {
                     <span className={`lv-score-badge ${scoreBadgeClass(scores.complete)}`}>{scores.complete}</span>
                   </td>
                   <td>
+                    <span className={`lv-score-badge ${scoreBadgeClass(scores.feasible)}`}>{scores.feasible}</span>
+                  </td>
+                  <td>
                     <span className={`lv-score-badge ${scoreBadgeClass(scores.verifiable)}`}>
                       {scores.verifiable}
                     </span>
                   </td>
                   <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.singular)}`}>{scores.singular}</span>
+                    <span className={`lv-score-badge ${scoreBadgeClass(scores.maturity)}`}>{scores.maturity}</span>
                   </td>
-                  <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.consistent_correct)}`}>
-                      {scores.consistent_correct}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.overall)}`}>{scores.overall}</span>
-                  </td>
+                  <td>{typeof scores.quality_score === "number" ? `${scores.quality_score}%` : "—"}</td>
                   <td className="lv-td-issue">
                     {tf ? (
                       <>

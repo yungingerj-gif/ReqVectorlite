@@ -16,13 +16,13 @@ export type TableSortColumn =
   | "id"
   | "text"
   | "type"
-  | "cluster"
+  | "necessary"
   | "unambiguous"
   | "complete"
+  | "feasible"
   | "verifiable"
-  | "singular"
-  | "consistent_correct"
-  | "overall"
+  | "maturity"
+  | "qualityScore"
   | "topIssue";
 
 export function severityRank(s: StructuredFinding["severity"]): number {
@@ -37,8 +37,8 @@ export function topFinding(findings: StructuredFinding[]): StructuredFinding | n
 }
 
 export function scoreBadgeClass(score: number): "score-high" | "score-mid" | "score-low" {
-  if (score >= 85) return "score-high";
-  if (score >= 60) return "score-mid";
+  if (score >= 2) return "score-high";
+  if (score >= 1) return "score-mid";
   return "score-low";
 }
 
@@ -84,8 +84,8 @@ export function sortRequirementRows(
       case "type":
         cmp = ra.type.localeCompare(rb.type);
         break;
-      case "cluster":
-        cmp = (a.semantic?.cluster_id ?? -1) - (b.semantic?.cluster_id ?? -1);
+      case "necessary":
+        cmp = a.scores.necessary - b.scores.necessary;
         break;
       case "unambiguous":
         cmp = a.scores.unambiguous - b.scores.unambiguous;
@@ -93,17 +93,17 @@ export function sortRequirementRows(
       case "complete":
         cmp = a.scores.complete - b.scores.complete;
         break;
+      case "feasible":
+        cmp = a.scores.feasible - b.scores.feasible;
+        break;
       case "verifiable":
         cmp = a.scores.verifiable - b.scores.verifiable;
         break;
-      case "singular":
-        cmp = a.scores.singular - b.scores.singular;
+      case "maturity":
+        cmp = a.scores.maturity - b.scores.maturity;
         break;
-      case "consistent_correct":
-        cmp = a.scores.consistent_correct - b.scores.consistent_correct;
-        break;
-      case "overall":
-        cmp = a.scores.overall - b.scores.overall;
+      case "qualityScore":
+        cmp = (a.scores.quality_score ?? 0) - (b.scores.quality_score ?? 0);
         break;
       case "topIssue": {
         const fa = tf(a.findings);

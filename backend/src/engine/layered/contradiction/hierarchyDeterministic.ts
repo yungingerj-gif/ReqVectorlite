@@ -7,12 +7,16 @@ const L6 = "L6_Contradiction";
 
 function isUpperBound(raw: string, comparator?: string): boolean {
   const s = `${comparator ?? ""} ${raw}`.toLowerCase();
-  return /\b(max|maximum|less\s+than|at\s+most|no\s+more|upper|<=|<)\b/.test(s);
+  if (s.includes(">=")) return false;
+  if (s.includes("<=")) return true;
+  return /\b(max|maximum|less\s+than|at\s+most|no\s+more|upper|not\s+exceed|<(?!=))\b/.test(s);
 }
 
 function isLowerBound(raw: string, comparator?: string): boolean {
   const s = `${comparator ?? ""} ${raw}`.toLowerCase();
-  return /\b(min|minimum|greater\s+than|at\s+least|no\s+less|lower|>=|>)\b/.test(s);
+  if (s.includes("<=")) return false;
+  if (s.includes(">=")) return true;
+  return /\b(min|minimum|greater\s+than|at\s+least|no\s+less|lower|>(?!=))\b/.test(s);
 }
 
 export function runHierarchyDeterministicChecks(

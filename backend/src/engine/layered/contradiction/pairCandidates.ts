@@ -3,7 +3,6 @@ import type { ContradictionConfig } from "../config";
 import type { RequirementSemantics } from "./semantics";
 import { hasSharedNumericalThresholdUnit, sameActorForIntraContradictionPair } from "./intraPairGuards";
 import { jaccard, overlapCoefficient, tokenSet } from "./textUtils";
-import { cosineSimilarity, l2Normalize, pairKeySorted } from "../embedding/semanticLayer";
 
 export type CandidatePair = {
   a: CanonicalRequirement;
@@ -24,28 +23,20 @@ function sharedTokens(a: Set<string>, b: Set<string>): number {
  * Heuristic candidate generation — avoids full O(n²) adjudication while keeping likely pairs.
  * Lexical overlap (Jaccard / overlap coefficient) only contributes after same-actor alignment
  * and a shared quantitative metric (same unit, finite numeric on both sides).
- *
- * When `embeddingNeighborKeys` is provided and non-empty, only pairs in that set are considered
- * (typically top-K cosine neighbors per requirement).
  */
 export function generateIntraCandidatePairs(
   reqs: CanonicalRequirement[],
   sems: Map<string, RequirementSemantics>,
-  cfg: ContradictionConfig,
-  embeddingNeighborKeys?: Set<string> | null,
-  embeddingVectors?: Map<string, number[]> | null
+  cfg: ContradictionConfig
 ): CandidatePair[] {
   const floor = cfg.intra_jaccard_floor;
   const budget = cfg.intra_pair_budget;
   const pairs: CandidatePair[] = [];
-  const useEmbedFilter =
-    embeddingNeighborKeys != null && embeddingNeighborKeys.size > 0;
 
   for (let i = 0; i < reqs.length; i++) {
     for (let j = i + 1; j < reqs.length; j++) {
       const a = reqs[i]!;
       const b = reqs[j]!;
-      if (useEmbedFilter && !embeddingNeighborKeys!.has(pairKeySorted(a.id, b.id))) continue;
 
       const sa = sems.get(a.id);
       const sb = sems.get(b.id);
@@ -60,16 +51,6 @@ export function generateIntraCandidatePairs(
 
       const reasons: string[] = ["same_actor_shared_numeric_metric"];
       let score = 0.2;
-
-      if (embeddingVectors) {
-        const va = embeddingVectors.get(a.id);
-        const vb = embeddingVectors.get(b.id);
-        if (va && vb) {
-          const c = cosineSimilarity(l2Normalize(va), l2Normalize(vb));
-          score += c * 0.35;
-          reasons.push(`embed_cos≈${c.toFixed(2)}`);
-        }
-      }
 
       if (jac >= floor) {
         score += jac * 2;

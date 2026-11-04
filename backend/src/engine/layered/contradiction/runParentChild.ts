@@ -1,39 +1,24 @@
-import type { AiClient } from "../ai/aiClient";
 import { isBlockEnabled, type EngineConfig, type EngineProfile } from "../config";
-import type { SemanticEmbeddingContext } from "../embedding/semanticLayer";
 import { createFinding } from "../deterministic/newFinding";
 import type { CanonicalRequirement, StructuredFinding } from "../types";
 import { BLOCK_HIERARCHY } from "./blockIds";
 import type { TraceLinkInput } from "../types";
 import { buildHierarchyPairs } from "./hierarchyMatch";
 import { runHierarchyDeterministicChecks } from "./hierarchyDeterministic";
-import { runHierarchyAiReview } from "./hierarchyAi";
 import { extractRequirementSemantics } from "./semantics";
 
-export async function runParentChildContradictions(
+export function runParentChildContradictions(
   parentReqs: CanonicalRequirement[],
   childReqs: CanonicalRequirement[],
   traceLinks: TraceLinkInput[] | undefined,
   config: EngineConfig,
-  profile: EngineProfile,
-  client: AiClient,
-  semanticCtx?: SemanticEmbeddingContext | null
-): Promise<{ findings: StructuredFinding[]; pairsExamined: number }> {
+  profile: EngineProfile
+): { findings: StructuredFinding[]; pairsExamined: number } {
   if (!isBlockEnabled(config, profile, BLOCK_HIERARCHY)) {
     return { findings: [], pairsExamined: 0 };
   }
 
-  const embedBoost =
-    config.contradiction.embedding_enabled &&
-    config.contradiction.embedding_hierarchy_match &&
-    semanticCtx
-      ? {
-          vectors: semanticCtx.vectors,
-          hierarchyMinCosine: config.contradiction.embedding_hierarchy_min_cosine,
-        }
-      : null;
-
-  const pairs = buildHierarchyPairs(parentReqs, childReqs, traceLinks, config.contradiction, embedBoost);
+  const pairs = buildHierarchyPairs(parentReqs, childReqs, traceLinks, config.contradiction);
   const psem = new Map(parentReqs.map((r) => [r.id, extractRequirementSemantics(r)]));
   const csem = new Map(childReqs.map((r) => [r.id, extractRequirementSemantics(r)]));
   const findings: StructuredFinding[] = [];
@@ -92,15 +77,6 @@ export async function runParentChildContradictions(
         })
       );
     }
-  }
-
-  if (config.contradiction.ai_hierarchy_enabled) {
-    const aiFs = await runHierarchyAiReview(
-      pairs,
-      client,
-      config.contradiction.hierarchy_ai_max_pairs
-    );
-    for (const f of aiFs) add(f);
   }
 
   return { findings, pairsExamined: pairs.length };
