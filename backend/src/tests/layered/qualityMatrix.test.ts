@@ -32,8 +32,17 @@ describe("quality matrix", () => {
     expect(scores?.verifiable).toBe(2);
     expect(scores?.unambiguous).toBe(2);
     expect(assessed.quality_matrix).toEqual([
-      [scores?.necessary, scores?.unambiguous, scores?.complete, scores?.feasible, scores?.verifiable],
+      [
+        scores?.unambiguous,
+        scores?.complete,
+        scores?.verifiable,
+        scores?.singular,
+        scores?.feasible,
+        scores?.consistent,
+      ],
     ]);
+    expect(scores?.singular).toBe(2);
+    expect(scores?.consistent).toBe(2);
     expect(scores?.maturity).toBeGreaterThanOrEqual(0);
     expect(scores?.maturity).toBeLessThanOrEqual(2);
   });
@@ -48,6 +57,68 @@ describe("quality matrix", () => {
     const scores = assessQualityMatrix([row], [], 2, dictionaries).scores.get(row.id);
     expect(row.parameters?.some((p) => p.value === 12 && p.unit === "mph")).toBe(true);
     expect(scores?.verifiable).toBe(2);
+  });
+
+  it("scores an objective observable criterion as verifiable without a number", () => {
+    const lamp = req({
+      id: "FR-10",
+      source_text: "The warning lamp shall illuminate red when a fault is present.",
+      normalized_text: "The warning lamp shall illuminate red when a fault is present.",
+      actor: "warning lamp",
+      obligation: "shall",
+      action: "illuminate",
+    });
+    const display = req({
+      id: "FR-11",
+      source_text: "The system shall display the vehicle speed.",
+      normalized_text: "The system shall display the vehicle speed.",
+      actor: "system",
+      obligation: "shall",
+      action: "display",
+      object: "vehicle speed",
+    });
+    const vague = req({
+      id: "FR-12",
+      source_text: "The system shall be user friendly.",
+      normalized_text: "The system shall be user friendly.",
+      actor: "system",
+      obligation: "shall",
+    });
+    const assessed = assessQualityMatrix([lamp, display, vague], [], 2, dictionaries);
+    expect(assessed.scores.get("FR-10")?.verifiable).toBe(2);
+    expect(assessed.scores.get("FR-11")?.verifiable).toBe(2);
+    expect(assessed.scores.get("FR-12")?.verifiable).toBe(0);
+    const deviation = req({
+      id: "FR-13",
+      source_text:
+        "The guidance system shall compute lateral deviation between the vehicle and the desired path.",
+      normalized_text:
+        "The guidance system shall compute lateral deviation between the vehicle and the desired path.",
+      actor: "guidance system",
+      obligation: "shall",
+      action: "compute",
+      object: "lateral deviation",
+    });
+    expect(assessQualityMatrix([deviation], [], 2, dictionaries).scores.get("FR-13")?.verifiable).toBe(2);
+    const disengage = req({
+      id: "FR-14",
+      source_text: "The guidance system shall disengage automatic guidance upon operator override input.",
+      normalized_text: "The guidance system shall disengage automatic guidance upon operator override input.",
+      actor: "guidance system",
+      obligation: "shall",
+      action: "disengage",
+      object: "automatic guidance",
+    });
+    expect(assessQualityMatrix([disengage], [], 2, dictionaries).scores.get("FR-14")?.verifiable).toBe(2);
+    const vagueTrigger = req({
+      id: "FR-15",
+      source_text: "The guidance system shall be easy upon operator override input.",
+      normalized_text: "The guidance system shall be easy upon operator override input.",
+      actor: "guidance system",
+      obligation: "shall",
+      action: "be",
+    });
+    expect(assessQualityMatrix([vagueTrigger], [], 2, dictionaries).scores.get("FR-15")?.verifiable).toBe(0);
   });
 
   it("marks vague weak wording below 2 and does not treat it as safety-critical", () => {
@@ -88,8 +159,8 @@ describe("quality matrix", () => {
     expect(assessed.scores.get("SR-1")?.safety_critical).toBe(true);
     expect(assessed.scores.get("SR-1")?.weight).toBe(3);
     expect(assessed.scores.get("SR-1")?.verifiable).toBe(0);
-    const rawVerifiable = assessed.quality_matrix.map((row) => row[4]);
-    const weightedVerifiable = assessed.weighted_evaluation_matrix.map((row) => row[4]);
+    const rawVerifiable = assessed.quality_matrix.map((row) => row[2]);
+    const weightedVerifiable = assessed.weighted_evaluation_matrix.map((row) => row[2]);
     expect(weightedVerifiable[0]).toBe(rawVerifiable[0]);
     expect(weightedVerifiable[1]).toBe((rawVerifiable[1] ?? 0) * 3);
     const unweighted = ((rawVerifiable[0] ?? 0) + (rawVerifiable[1] ?? 0)) / 2;
@@ -98,13 +169,13 @@ describe("quality matrix", () => {
   });
 
   it("turns each Q row into a 0–100 quality score and averages them", () => {
-    expect(requirementQualityScore([2, 2, 2, 2, 2], [1, 1, 1, 1, 1])).toBe(100);
-    expect(requirementQualityScore([2, 2, 2, 4, 4], [1, 1, 1, 2, 2])).toBe(100);
-    expect(requirementQualityScore([2, 2, 2, 2, 0], [1, 1, 1, 1, 1])).toBe(80);
+    expect(requirementQualityScore([2, 2, 2, 2, 2, 2], [1, 1, 1, 1, 1, 1])).toBe(100);
+    expect(requirementQualityScore([2, 2, 4, 2, 4, 2], [1, 1, 2, 1, 2, 1])).toBe(100);
+    expect(requirementQualityScore([2, 2, 2, 2, 2, 0], [1, 1, 1, 1, 1, 1])).toBe(83.33);
     expect(defectProfile([
-      [2, 1, 0, 2, 0],
-      [0, 1, 0, 2, 0],
-    ])).toEqual([1, 1, 0, 2, 0]);
+      [2, 1, 0, 2, 2, 0],
+      [0, 1, 0, 2, 2, 0],
+    ])).toEqual([1, 1, 0, 2, 2, 0]);
 
     const measurable = req({
       id: "FR-6",
@@ -130,13 +201,35 @@ describe("quality matrix", () => {
     expect(qMeasurable).toBeLessThanOrEqual(100);
     expect(qVague).toBeGreaterThanOrEqual(0);
     expect(assessed.document.system_maturity_index).toBe(Math.round(((qMeasurable + qVague) / 2) * 100) / 100);
-    expect(assessed.document.defect_profile).toHaveLength(5);
-    expect(assessed.document.defect_profile[4]).toBe(
-      ((assessed.quality_matrix[0]?.[4] ?? 0) + (assessed.quality_matrix[1]?.[4] ?? 0)) / 2
+    expect(assessed.document.defect_profile).toHaveLength(6);
+    expect(assessed.document.defect_profile[2]).toBe(
+      ((assessed.quality_matrix[0]?.[2] ?? 0) + (assessed.quality_matrix[1]?.[2] ?? 0)) / 2
     );
   });
 
-  it("scores an empty joint numeric interval as document feasibility 0", () => {
+  it("scores two shall clauses as singular 0 and a percentage over 100 as consistent 0", () => {
+    const compound = req({
+      id: "FR-8",
+      source_text: "The system shall log the event and the system shall notify the operator.",
+      normalized_text: "The system shall log the event and the system shall notify the operator.",
+      actor: "system",
+      obligation: "shall",
+    });
+    const percent = req({
+      id: "FR-9",
+      source_text: "The system shall achieve 120% availability.",
+      normalized_text: "The system shall achieve 120% availability.",
+      actor: "system",
+      obligation: "shall",
+      action: "achieve",
+      object: "availability",
+    });
+    const assessed = assessQualityMatrix([compound, percent], [], 2, dictionaries);
+    expect(assessed.scores.get("FR-8")?.singular).toBe(0);
+    expect(assessed.scores.get("FR-9")?.consistent).toBe(0);
+  });
+
+  it("scores opposing numeric bounds as feasible 0 on both requirements", () => {
     const upper = req({
       id: "FR-4",
       source_text: "The controller shall limit torque to at most 400 Nm.",
@@ -150,7 +243,7 @@ describe("quality matrix", () => {
       parameters: [{ parameter: "torque", operator: ">=", value: 600, unit: "nm" }],
     });
     const assessed = assessQualityMatrix([upper, lower], [], 2, dictionaries);
-    expect(assessed.document.feasible).toBe(0);
-    expect(assessed.document.maturity).toBe(0);
+    expect(assessed.scores.get("FR-4")?.feasible).toBe(0);
+    expect(assessed.scores.get("FR-5")?.feasible).toBe(0);
   });
 });

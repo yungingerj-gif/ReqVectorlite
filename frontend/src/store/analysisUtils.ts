@@ -16,11 +16,12 @@ export type TableSortColumn =
   | "id"
   | "text"
   | "type"
-  | "necessary"
   | "unambiguous"
   | "complete"
-  | "feasible"
   | "verifiable"
+  | "singular"
+  | "feasible"
+  | "consistent"
   | "maturity"
   | "qualityScore"
   | "topIssue";
@@ -84,20 +85,23 @@ export function sortRequirementRows(
       case "type":
         cmp = ra.type.localeCompare(rb.type);
         break;
-      case "necessary":
-        cmp = a.scores.necessary - b.scores.necessary;
-        break;
       case "unambiguous":
         cmp = a.scores.unambiguous - b.scores.unambiguous;
         break;
       case "complete":
         cmp = a.scores.complete - b.scores.complete;
         break;
+      case "verifiable":
+        cmp = a.scores.verifiable - b.scores.verifiable;
+        break;
+      case "singular":
+        cmp = a.scores.singular - b.scores.singular;
+        break;
       case "feasible":
         cmp = a.scores.feasible - b.scores.feasible;
         break;
-      case "verifiable":
-        cmp = a.scores.verifiable - b.scores.verifiable;
+      case "consistent":
+        cmp = a.scores.consistent - b.scores.consistent;
         break;
       case "maturity":
         cmp = a.scores.maturity - b.scores.maturity;

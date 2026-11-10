@@ -17,7 +17,6 @@ export function DashboardOverview() {
     if (!analysisResult || rows.length === 0 || !maturity) {
       return {
         count: 0,
-        maturity: "—",
         systemMaturity: "—",
         weightedFeasibility: "—",
         weightedVerifiability: "—",
@@ -29,12 +28,10 @@ export function DashboardOverview() {
     const index = maturity.system_maturity_index;
     return {
       count: rows.length,
-      maturity: String(maturity.maturity),
       systemMaturity: typeof index === "number" ? `${index}%` : "—",
       weightedFeasibility: String(maturity.weighted_feasibility),
       weightedVerifiability: String(maturity.weighted_verifiability),
       highFindings,
-      detail: `Completeness ${maturity.completeness} · Consistency ${maturity.consistency} · Bounded ${maturity.bounded} · Feasible ${maturity.feasible}`,
     };
   }, [analysisResult, rows]);
 
@@ -51,10 +48,6 @@ export function DashboardOverview() {
         <div className="lv-stat-card">
           <span className="lv-stat-value">{stats.count}</span>
           <span className="lv-stat-label">Requirements (filtered)</span>
-        </div>
-        <div className="lv-stat-card">
-          <span className="lv-stat-value">{stats.maturity}</span>
-          <span className="lv-stat-label">Document maturity</span>
         </div>
         <div className="lv-stat-card">
           <span className="lv-stat-value">{stats.systemMaturity}</span>
@@ -79,11 +72,12 @@ export function DashboardOverview() {
               <table className="lv-table">
                 <thead>
                   <tr>
-                    <th>Necessary</th>
                     <th>Unambiguous</th>
                     <th>Complete</th>
-                    <th>Feasible</th>
                     <th>Verifiable</th>
+                    <th>Singular</th>
+                    <th>Feasible</th>
+                    <th>Consistent</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -95,7 +89,7 @@ export function DashboardOverview() {
                 </tbody>
               </table>
             </div>
-            {(analysisResult.document_maturity.defect_profile[4] ?? 1) < 0.5 ? (
+            {(analysisResult.document_maturity.defect_profile[2] ?? 1) < 0.5 ? (
               <p className="lv-muted">
                 Verifiable is close to zero. Testable criteria are weak across the specification. Tighter templates or
                 training on measurable limits would raise this column.
@@ -111,11 +105,12 @@ export function DashboardOverview() {
                 <thead>
                   <tr>
                     <th>Requirement</th>
-                    <th>Necessary</th>
                     <th>Unambiguous</th>
                     <th>Complete</th>
-                    <th>Feasible</th>
                     <th>Verifiable</th>
+                    <th>Singular</th>
+                    <th>Feasible</th>
+                    <th>Consistent</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -136,12 +131,6 @@ export function DashboardOverview() {
                 </tbody>
               </table>
             </div>
-          </div>
-        ) : null}
-        {"detail" in stats && stats.detail ? (
-          <div className="lv-stat-card wide">
-            <span className="lv-stat-label">Document checks</span>
-            <div className="lv-ratio-bar">{stats.detail}</div>
           </div>
         ) : null}
         <div className="lv-stat-card wide">
