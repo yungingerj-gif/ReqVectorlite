@@ -55,11 +55,12 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
       cell("Req ID"),
       cell("Normalized text"),
       cell("Maturity"),
-      cell("Necessary"),
       cell("Unamb."),
       cell("Complete"),
-      cell("Feasible"),
       cell("Verif."),
+      cell("Singular"),
+      cell("Feasible"),
+      cell("Consistent"),
       cell("Quality %"),
     ],
   });
@@ -71,11 +72,12 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
           cell(r.requirement.id),
           cell(r.requirement.normalized_text),
           cell(String(r.scores.maturity)),
-          cell(String(r.scores.necessary)),
           cell(String(r.scores.unambiguous)),
           cell(String(r.scores.complete)),
-          cell(String(r.scores.feasible)),
           cell(String(r.scores.verifiable)),
+          cell(String(r.scores.singular)),
+          cell(String(r.scores.feasible)),
+          cell(String(r.scores.consistent)),
           cell(typeof r.scores.quality_score === "number" ? `${r.scores.quality_score}%` : ""),
         ],
       })
@@ -152,7 +154,10 @@ export async function buildLayeredAnalysisDocx(result: LayeredAnalysisResult): P
     }),
     new Paragraph({
       children: [
-        new TextRun({ text: "Defect profile (necessary, unambiguous, complete, feasible, verifiable): ", bold: true }),
+        new TextRun({
+          text: "Defect profile (unambiguous, complete, verifiable, singular, feasible, consistent): ",
+          bold: true,
+        }),
         new TextRun((result.document_maturity.defect_profile ?? []).join(", ")),
       ],
     }),

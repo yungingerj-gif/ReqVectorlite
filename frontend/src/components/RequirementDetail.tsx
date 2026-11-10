@@ -166,11 +166,12 @@ export function RequirementDetail() {
       <div className="lv-score-grid">
         {(
           [
-            ["Necessary", scores.necessary],
             ["Unambiguous", scores.unambiguous],
             ["Complete", scores.complete],
-            ["Feasible", scores.feasible],
             ["Verifiable", scores.verifiable],
+            ["Singular", scores.singular],
+            ["Feasible", scores.feasible],
+            ["Consistent", scores.consistent],
             ["Maturity", scores.maturity],
           ] as const
         ).map(([label, val]) => (

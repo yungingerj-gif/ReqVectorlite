@@ -158,11 +158,12 @@ export type QualityScore = 0 | 1 | 2;
  * `weight` is 1, or the safety-critical weight when the requirement is explicitly labeled.
  */
 export interface QualityVector {
-  necessary: QualityScore;
   unambiguous: QualityScore;
   complete: QualityScore;
-  feasible: QualityScore;
   verifiable: QualityScore;
+  singular: QualityScore;
+  feasible: QualityScore;
+  consistent: QualityScore;
   maturity: QualityScore;
   /** q_i = (sum_j Q_ij / (2 * sum_j W_ij)) * 100. Range 0–100. */
   quality_score: number;
@@ -171,24 +172,19 @@ export interface QualityVector {
 }
 
 /**
- * Pass 2. The four checks are the document row.
+ * Document rollups from the six scored attributes.
  * Weighted feasibility and verifiability are the matching columns of Q divided by the columns of W.
  * `system_maturity_index` is the mean of the per-requirement quality scores.
  * `defect_profile` is the column means of the raw matrix R.
  */
 export interface DocumentMaturity {
-  completeness: QualityScore;
-  consistency: QualityScore;
-  bounded: QualityScore;
-  feasible: QualityScore;
-  maturity: QualityScore;
   weighted_feasibility: number;
   weighted_verifiability: number;
   safety_critical_weight: number;
   safety_critical_count: number;
   /** M_sys = (1/n) sum q_i. Range 0–100. */
   system_maturity_index: number;
-  /** d = (1/n) sum r_i. Order: necessary, unambiguous, complete, feasible, verifiable. Each mean is 0–2. */
+  /** d = (1/n) sum r_i. Order: unambiguous, complete, verifiable, singular, feasible, consistent. Each mean is 0–2. */
   defect_profile: number[];
 }
 
@@ -229,9 +225,9 @@ export interface LayeredAnalysisResult {
   meta: LayeredAnalysisMeta;
   requirements: PerRequirementResult[];
   set_level_findings: StructuredFinding[];
-  /** R, n×5 raw scores: necessary, unambiguous, complete, feasible, verifiable. */
+  /** R, n×6 raw scores: unambiguous, complete, verifiable, singular, feasible, consistent. */
   quality_matrix: number[][];
-  /** W, n×5. Safety-critical rows use the safety weight on feasible and verifiable. */
+  /** W, n×6. Safety-critical rows use the safety weight on verifiable and feasible. */
   weight_matrix: number[][];
   /** Q = R × W, same shape as R. */
   weighted_evaluation_matrix: number[][];

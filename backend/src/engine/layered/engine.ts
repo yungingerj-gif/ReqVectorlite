@@ -79,7 +79,11 @@ export async function runLayeredEngine(
     requirements,
     setLevel,
     locked.safety_critical_weight,
-    locked.dictionaries
+    locked.dictionaries,
+    {
+      maxWords: locked.thresholds.max_words_for_singular_warn,
+      countAndOr: locked.singular_conjunction_patterns.count_and_or_as_compound,
+    }
   );
 
   const requirementsOut = requirements.map((r) => {

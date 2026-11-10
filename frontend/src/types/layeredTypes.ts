@@ -73,11 +73,12 @@ export interface StructuredFinding {
 export type QualityScore = 0 | 1 | 2;
 
 export interface QualityVector {
-  necessary: QualityScore;
   unambiguous: QualityScore;
   complete: QualityScore;
-  feasible: QualityScore;
   verifiable: QualityScore;
+  singular: QualityScore;
+  feasible: QualityScore;
+  consistent: QualityScore;
   maturity: QualityScore;
   /** q_i, 0–100. Row sum of Q divided by the maximum weighted row. */
   quality_score: number;
@@ -86,18 +87,13 @@ export interface QualityVector {
 }
 
 export interface DocumentMaturity {
-  completeness: QualityScore;
-  consistency: QualityScore;
-  bounded: QualityScore;
-  feasible: QualityScore;
-  maturity: QualityScore;
   weighted_feasibility: number;
   weighted_verifiability: number;
   safety_critical_weight: number;
   safety_critical_count: number;
   /** M_sys, mean of q_i, 0–100. */
   system_maturity_index: number;
-  /** Column means of R. Order: necessary, unambiguous, complete, feasible, verifiable. */
+  /** Column means of R. Order: unambiguous, complete, verifiable, singular, feasible, consistent. */
   defect_profile: number[];
 }
 
