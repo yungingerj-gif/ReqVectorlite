@@ -35,6 +35,29 @@ export async function analyzeLayeredUpload(fd: FormData): Promise<{
   return { result: body, sourceExtract };
 }
 
+export interface RewriteAdvanceResult {
+  advances: boolean;
+  previous: (number | null)[];
+  next: (number | null)[];
+  previous_stage: string | null;
+  next_stage: string | null;
+  reason: string;
+}
+
+export async function checkRewriteAdvances(body: {
+  currentText: string;
+  candidateText: string;
+  peerTexts?: string[];
+}): Promise<RewriteAdvanceResult> {
+  const res = await fetch(apiUrl("/api/layered/rewrite-advances"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
+  return res.json() as Promise<RewriteAdvanceResult>;
+}
+
 export async function exportLayeredDocx(result: LayeredAnalysisResult): Promise<Blob> {
   const res = await fetch(apiUrl("/api/layered/export/analysis-docx"), {
     method: "POST",

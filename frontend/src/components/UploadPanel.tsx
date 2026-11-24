@@ -80,8 +80,8 @@ export function UploadPanel() {
       </label>
 
       <p className="lv-hint">
-        Analysis uses deterministic INCOSE-style rules only (clarity, completeness, verifiability, singularity,
-        consistency, plus intra-spec set-level and contradiction checks).
+        Analysis scores four gates in order: ambiguous, feasible, verifiable, then singular. A later gate stays
+        blank until every earlier gate is 2. Findings explain issues and set the document consistency score.
       </p>
 
       <button

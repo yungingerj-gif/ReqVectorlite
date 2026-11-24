@@ -2336,6 +2336,11 @@ label.inline {
   color: #fecaca;
 }
 
+.lv-score-badge.score-withheld {
+  background: transparent;
+  color: #94a3b8;
+}
+
 .lv-detail-empty {
   min-height: 120px;
 }

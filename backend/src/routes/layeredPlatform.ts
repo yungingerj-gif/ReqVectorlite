@@ -9,6 +9,7 @@
  * - `POST /layered/analyze` — JSON body with `rawText` for one specification.
  * - `POST /layered/analyze-upload` — multipart `file` for one specification.
  * - `POST /layered/export/analysis-docx` — Word report from a prior `LayeredAnalysisResult`.
+ * - `POST /layered/rewrite-advances` — score a candidate rewrite against the current row and its peers.
  * - `POST /layered/export/revised-source` — apply text replacements to an uploaded source file.
  *
  * @module routes/layeredPlatform
@@ -27,6 +28,7 @@ import {
 import { extractTextForLayered } from "../ingest/ingest";
 import { buildRevisedSourceExport } from "../engine/layered/revisedSourceExport";
 import { buildLayeredAnalysisDocx } from "../engine/layered/wordReport";
+import { assessRewriteAdvance } from "../engine/layered/rewriteGate";
 import type { LayeredAnalysisResult } from "../engine/layered/types";
 
 const router = express.Router();
@@ -81,6 +83,12 @@ const analyzeSchema = z.object({
 
 const exportSchema = z.object({
   result: z.any(),
+});
+
+const rewriteAdvanceSchema = z.object({
+  currentText: z.string().min(1).max(20_000),
+  candidateText: z.string().min(1).max(20_000),
+  peerTexts: z.array(z.string().max(20_000)).max(500).optional(),
 });
 
 const revisedSourcePatchSchema = z.object({
@@ -253,6 +261,16 @@ router.post(
       config
     );
     res.json({ ...result, source_extract: text });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** `POST /api/layered/rewrite-advances` — keep a rewrite only when a later gate opens and earlier 2s stay 2. */
+router.post("/layered/rewrite-advances", validateBody(rewriteAdvanceSchema), (req, res, next) => {
+  try {
+    const body = req.body as z.infer<typeof rewriteAdvanceSchema>;
+    res.json(assessRewriteAdvance(body.currentText, body.candidateText, body.peerTexts ?? []));
   } catch (e) {
     next(e);
   }

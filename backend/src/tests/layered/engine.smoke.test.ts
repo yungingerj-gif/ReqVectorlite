@@ -24,10 +24,11 @@ describe("layered engine smoke", () => {
     expect(result.requirements[0]?.scores.maturity).toBeGreaterThanOrEqual(0);
     expect(result.requirements[0]?.scores.maturity).toBeLessThanOrEqual(2);
     expect(result.quality_matrix.length).toBe(result.requirements.length);
-    expect(result.quality_matrix[0]?.length).toBe(6);
+    expect(result.quality_matrix[0]?.length).toBe(4);
     expect(result.document_maturity.system_maturity_index).toBeGreaterThanOrEqual(0);
     expect(result.document_maturity.system_maturity_index).toBeLessThanOrEqual(100);
-    expect(result.document_maturity.defect_profile).toHaveLength(6);
+    expect(result.document_maturity.consistency).toBeGreaterThanOrEqual(0);
+    expect(result.document_maturity.consistency).toBeLessThanOrEqual(2);
     expect(result.requirements.every((r) => r.scores.quality_score >= 0 && r.scores.quality_score <= 100)).toBe(
       true
     );

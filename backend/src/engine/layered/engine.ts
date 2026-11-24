@@ -97,8 +97,6 @@ export async function runLayeredEngine(
 
   return {
     quality_matrix: assessed.quality_matrix,
-    weight_matrix: assessed.weight_matrix,
-    weighted_evaluation_matrix: assessed.weighted_evaluation_matrix,
     document_maturity: assessed.document,
     meta: {
       profile: profile.id,

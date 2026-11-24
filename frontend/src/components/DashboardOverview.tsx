@@ -18,8 +18,8 @@ export function DashboardOverview() {
       return {
         count: 0,
         systemMaturity: "—",
-        weightedFeasibility: "—",
-        weightedVerifiability: "—",
+        consistency: "—",
+        meanMaturity: "—",
         highFindings: 0,
       };
     }
@@ -29,8 +29,8 @@ export function DashboardOverview() {
     return {
       count: rows.length,
       systemMaturity: typeof index === "number" ? `${index}%` : "—",
-      weightedFeasibility: String(maturity.weighted_feasibility),
-      weightedVerifiability: String(maturity.weighted_verifiability),
+      consistency: String(maturity.consistency),
+      meanMaturity: typeof maturity.mean_maturity === "number" ? `${Math.round(maturity.mean_maturity * 10000) / 100}%` : "—",
       highFindings,
     };
   }, [analysisResult, rows]);
@@ -54,76 +54,42 @@ export function DashboardOverview() {
           <span className="lv-stat-label">System maturity index</span>
         </div>
         <div className="lv-stat-card">
-          <span className="lv-stat-value">{stats.weightedFeasibility}</span>
-          <span className="lv-stat-label">Weighted feasibility</span>
+          <span className="lv-stat-value">{stats.consistency}</span>
+          <span className="lv-stat-label">Set consistency</span>
         </div>
         <div className="lv-stat-card">
-          <span className="lv-stat-value">{stats.weightedVerifiability}</span>
-          <span className="lv-stat-label">Weighted verifiability</span>
+          <span className="lv-stat-value">{stats.meanMaturity}</span>
+          <span className="lv-stat-label">Mean gate maturity</span>
         </div>
         <div className="lv-stat-card high">
           <span className="lv-stat-value">{stats.highFindings}</span>
           <span className="lv-stat-label">High severity findings</span>
         </div>
-        {analysisResult?.document_maturity?.defect_profile?.length ? (
+        {analysisResult?.quality_matrix?.length ? (
           <div className="lv-stat-card wide">
-            <span className="lv-stat-label">Defect profile (column means of R)</span>
-            <div className="lv-table-scroll">
-              <table className="lv-table">
-                <thead>
-                  <tr>
-                    <th>Unambiguous</th>
-                    <th>Complete</th>
-                    <th>Verifiable</th>
-                    <th>Singular</th>
-                    <th>Feasible</th>
-                    <th>Consistent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    {analysisResult.document_maturity.defect_profile.map((value, column) => (
-                      <td key={column}>{value}</td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            {(analysisResult.document_maturity.defect_profile[2] ?? 1) < 0.5 ? (
-              <p className="lv-muted">
-                Verifiable is close to zero. Testable criteria are weak across the specification. Tighter templates or
-                training on measurable limits would raise this column.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        {analysisResult?.weighted_evaluation_matrix?.length ? (
-          <div className="lv-stat-card wide">
-            <span className="lv-stat-label">Weighted evaluation matrix Q = R × W</span>
+            <span className="lv-stat-label">Gate matrix. A blank cell was withheld.</span>
             <div className="lv-table-scroll">
               <table className="lv-table">
                 <thead>
                   <tr>
                     <th>Requirement</th>
-                    <th>Unambiguous</th>
-                    <th>Complete</th>
+                    <th>Ambiguous</th>
+                    <th>Feasible</th>
                     <th>Verifiable</th>
                     <th>Singular</th>
-                    <th>Feasible</th>
-                    <th>Consistent</th>
                   </tr>
                 </thead>
                 <tbody>
                   {analysisResult.requirements.map((row, index) => {
-                    const weighted = analysisResult.weighted_evaluation_matrix[index] ?? [];
+                    const cells = analysisResult.quality_matrix[index] ?? [];
                     return (
                       <tr key={row.requirement.id}>
                         <td>
                           <code>{row.requirement.id}</code>
                           {row.scores.safety_critical ? " SC" : ""}
                         </td>
-                        {weighted.map((value, column) => (
-                          <td key={`${row.requirement.id}-${column}`}>{value}</td>
+                        {cells.map((value, column) => (
+                          <td key={`${row.requirement.id}-${column}`}>{value ?? "—"}</td>
                         ))}
                       </tr>
                     );

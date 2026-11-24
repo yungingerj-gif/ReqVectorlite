@@ -5,23 +5,20 @@ import type {
   CanonicalRequirement,
   ComparisonOperator,
   DocumentMaturity,
+  GateStage,
+  GatedScore,
   QualityScore,
   QualityVector,
   StructuredFinding,
 } from "./types";
 
-const COLUMNS = ["unambiguous", "complete", "verifiable", "singular", "feasible", "consistent"] as const;
-
-const VERIFIABLE_COLUMN = COLUMNS.indexOf("verifiable");
-const FEASIBLE_COLUMN = COLUMNS.indexOf("feasible");
+const GATE_COUNT = 4;
 
 const SAFETY_CRITICAL =
   /\b(safety[\s-]*critical|ASIL[\s-]*[A-D]|SIL[\s-]*[1-4])\b/i;
 
 const UNBOUNDED = /\b(infinite|unlimited|zero\s+defect|100%\s+of\s+all)\b/i;
 const ABSOLUTE = /\b(always|never|all\s+times|under\s+all\s+conditions)\b/i;
-const OPEN_ENDED = /\betc\.?|and\s+so\s+on|and\s+more\b/i;
-const CONDITIONAL = /\b(when|if|while|unless)\b/i;
 const PASSIVE =
   /\b(?:shall|must|is|are|be)\s+(?:\w+\s+){0,2}(?:\w+ed|built|shown|made)\b/i;
 
@@ -47,10 +44,6 @@ type Bound = {
   hasLower: boolean;
   hasUpper: boolean;
 };
-
-function minScore(values: QualityScore[]): QualityScore {
-  return values.reduce((m, v) => (v < m ? v : m), 2 as QualityScore);
-}
 
 function containsPhrase(haystack: string, needle: string): boolean {
   const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -162,21 +155,6 @@ function scoreUnambiguous(req: CanonicalRequirement, dictionaries: EngineConfig[
   return 2;
 }
 
-function scoreComplete(req: CanonicalRequirement): QualityScore {
-  const frame = semanticFrameOf(req);
-  const text = req.normalized_text;
-  const binding = hasBindingObligation(req);
-  const conditional = CONDITIONAL.test(text);
-  const conditionStated = frame.conditions.length > 0 || frame.modes.length > 0 || frame.states.length > 0;
-  if (!binding || (conditional && !conditionStated)) return 0;
-  const actor = Boolean(frame.actor);
-  const action = Boolean(frame.action && frame.action.length >= 3);
-  const object = Boolean(frame.object && frame.object.length > 0);
-  if (actor && action && object && (!conditional || conditionStated)) return 2;
-  if (action) return 1;
-  return 0;
-}
-
 function scoreSingular(
   req: CanonicalRequirement,
   options: { maxWords: number; countAndOr: boolean }
@@ -188,11 +166,6 @@ function scoreSingular(
   const words = text.split(/\s+/).filter(Boolean).length;
   if ((conjunctions >= 2 && obligations >= 1) || words > options.maxWords || sentenceCount(text) > 1) return 1;
   return 2;
-}
-
-function findingTouches(finding: StructuredFinding, id: string): boolean {
-  if (finding.requirement_id === id) return true;
-  return finding.related_requirement_ids?.includes(id) ?? false;
 }
 
 function percentExceeds100(text: string): boolean {
@@ -209,19 +182,24 @@ function hasShallAndShallNot(text: string): boolean {
   return notIdx >= 0 && shallIdx >= 0 && Math.abs(notIdx - shallIdx) < 400;
 }
 
-function scoreConsistent(req: CanonicalRequirement, findings: StructuredFinding[]): QualityScore {
-  const text = req.normalized_text;
-  const mine = findings.filter((finding) => findingTouches(finding, req.id));
-  const direct = mine.some((finding) => DIRECT_CONFLICT.has(finding.issue_type));
-  if (percentExceeds100(text) || direct) return 0;
-  const soft = mine.some((finding) => SOFT_CONFLICT.has(finding.issue_type));
-  if (ABSOLUTE.test(text) || OPEN_ENDED.test(text) || hasShallAndShallNot(text) || soft) return 1;
+function scoreSetConsistency(requirements: CanonicalRequirement[], findings: StructuredFinding[]): QualityScore {
+  const direct = findings.some((finding) => DIRECT_CONFLICT.has(finding.issue_type));
+  const localHard = requirements.some(
+    (req) => percentExceeds100(req.normalized_text) || hasShallAndShallNot(req.normalized_text)
+  );
+  if (direct || localHard) return 0;
+  if (findings.some((finding) => SOFT_CONFLICT.has(finding.issue_type))) return 1;
   return 2;
 }
 
-function scoreFeasible(req: CanonicalRequirement, requirements: CanonicalRequirement[]): QualityScore {
-  const text = req.normalized_text;
-  if (UNBOUNDED.test(text) || outsideForeignLimit(req, requirements)) return 0;
+function scoreFeasible(
+  req: CanonicalRequirement,
+  requirements: CanonicalRequirement[],
+  dictionaries: EngineConfig["dictionaries"]
+): QualityScore {
+  const text = `${req.normalized_text} ${req.source_text}`;
+  if (UNBOUNDED.test(text) || ABSOLUTE.test(text) || outsideForeignLimit(req, requirements)) return 0;
+  if (hasVagueWording(text, dictionaries)) return 1;
   return 2;
 }
 
@@ -298,66 +276,31 @@ function scoreVerifiable(req: CanonicalRequirement, dictionaries: EngineConfig["
   return 0;
 }
 
-function rowVector(
-  scores: Omit<QualityVector, "maturity" | "quality_score" | "safety_critical" | "weight">
-): QualityScore[] {
-  return COLUMNS.map((key) => scores[key]);
+function gateStage(unambiguous: QualityScore, feasible: GatedScore, verifiable: GatedScore, singular: GatedScore): GateStage {
+  if (unambiguous < 2) return "ambiguous";
+  if (feasible !== 2) return "feasible";
+  if (verifiable !== 2) return "verifiable";
+  if (singular !== 2) return "singular";
+  return "done";
 }
 
-/** q_i = (sum_j Q_ij / (2 * sum_j W_ij)) * 100. A fully met row is 100. */
-export function requirementQualityScore(qRow: number[], wRow: number[]): number {
-  let sumQ = 0;
-  let sumW = 0;
-  for (let j = 0; j < COLUMNS.length; j++) {
-    sumQ += qRow[j] ?? 0;
-    sumW += wRow[j] ?? 1;
+function gatesPassed(row: GatedScore[]): number {
+  let passed = 0;
+  for (const cell of row) {
+    if (cell !== 2) break;
+    passed += 1;
   }
-  if (sumW <= 0) return 0;
-  const percentage = (sumQ / (2 * sumW)) * 100;
-  return Math.round(percentage * 100) / 100;
+  return passed;
 }
 
-/** d = (1/n) sum r_i. Column means of R, in attribute order. */
-export function defectProfile(raw: number[][]): number[] {
-  const n = raw.length;
-  if (n === 0) return COLUMNS.map(() => 0);
-  return COLUMNS.map((_, column) => {
-    let sum = 0;
-    for (const row of raw) sum += row[column] ?? 0;
-    return Math.round((sum / n) * 100) / 100;
-  });
-}
-
-/**
- * W is n×6, aligned with R.
- * A safety-critical row carries ω on verifiable and feasible. Every other cell is 1.
- */
-export function weightMatrixFor(requirementWeights: number[]): number[][] {
-  return requirementWeights.map((weight) =>
-    COLUMNS.map((column) => (column === "verifiable" || column === "feasible" ? weight : 1))
-  );
-}
-
-/** Q = R × W, cell by cell. Both matrices are n×6. */
-export function weightedEvaluationMatrix(raw: number[][], weights: number[][]): number[][] {
-  return raw.map((row, i) =>
-    row.map((value, j) => {
-      const weight = weights[i]?.[j] ?? 1;
-      return Math.round(value * weight * 1000) / 1000;
-    })
-  );
-}
-
-/** Column mean of Q divided by the matching column of W. Stays on the 0–2 scale. */
-function columnMeanFromProduct(weighted: number[][], weights: number[][], column: number): number {
-  let numerator = 0;
-  let denominator = 0;
-  for (let i = 0; i < weighted.length; i++) {
-    numerator += weighted[i]?.[column] ?? 0;
-    denominator += weights[i]?.[column] ?? 1;
+/** A candidate row is kept when it opens a later gate and every cell that was already 2 stays 2. */
+export function rowAdvances(previous: GatedScore[], next: GatedScore[]): boolean {
+  if (gatesPassed(next) <= gatesPassed(previous)) return false;
+  const width = Math.max(previous.length, next.length);
+  for (let i = 0; i < width; i += 1) {
+    if (previous[i] === 2 && next[i] !== 2) return false;
   }
-  if (denominator === 0) return 0;
-  return Math.round((numerator / denominator) * 100) / 100;
+  return true;
 }
 
 export function assessQualityMatrix(
@@ -369,12 +312,8 @@ export function assessQualityMatrix(
 ): {
   scores: Map<string, QualityVector>;
   document: DocumentMaturity;
-  /** R, n×6 raw scores: unambiguous, complete, verifiable, singular, feasible, consistent. */
-  quality_matrix: number[][];
-  /** W, n×6. ω on verifiable and feasible for safety-critical rows. */
-  weight_matrix: number[][];
-  /** Q = R × W. */
-  weighted_evaluation_matrix: number[][];
+  /** R, n×4. Order: ambiguous, feasible, verifiable, singular. Null means withheld. */
+  quality_matrix: GatedScore[][];
 } {
   const omega = Number.isFinite(safetyCriticalWeight) && safetyCriticalWeight >= 1 ? safetyCriticalWeight : 1;
   const singularOptions = {
@@ -382,58 +321,46 @@ export function assessQualityMatrix(
     countAndOr: singular.countAndOr !== false,
   };
   const scores = new Map<string, QualityVector>();
-  const quality_matrix: number[][] = [];
-  const weights: number[] = [];
+  const quality_matrix: GatedScore[][] = [];
+  const maturities: number[] = [];
 
   for (const req of requirements) {
-    const cells = {
-      unambiguous: scoreUnambiguous(req, dictionaries),
-      complete: scoreComplete(req),
-      verifiable: scoreVerifiable(req, dictionaries),
-      singular: scoreSingular(req, singularOptions),
-      feasible: scoreFeasible(req, requirements),
-      consistent: scoreConsistent(req, setLevelFindings),
-    };
+    const unambiguous = scoreUnambiguous(req, dictionaries);
+    const feasible = unambiguous === 2 ? scoreFeasible(req, requirements, dictionaries) : null;
+    const verifiable = feasible === 2 ? scoreVerifiable(req, dictionaries) : null;
+    const singularScore = verifiable === 2 ? scoreSingular(req, singularOptions) : null;
+    const row: GatedScore[] = [unambiguous, feasible, verifiable, singularScore];
+    const passed = gatesPassed(row);
+    const maturity = passed / GATE_COUNT;
     const safety_critical = isSafetyCritical(req);
-    const weight = safety_critical ? omega : 1;
     const vector: QualityVector = {
-      ...cells,
-      maturity: minScore(rowVector(cells)),
-      quality_score: 0,
+      unambiguous,
+      feasible,
+      verifiable,
+      singular: singularScore,
+      stage: gateStage(unambiguous, feasible, verifiable, singularScore),
+      maturity,
+      quality_score: Math.round(maturity * 10000) / 100,
       safety_critical,
-      weight,
+      weight: safety_critical ? omega : 1,
     };
     scores.set(req.id, vector);
-    quality_matrix.push(rowVector(cells));
-    weights.push(weight);
+    quality_matrix.push(row);
+    maturities.push(maturity);
   }
 
-  const weight_matrix = weightMatrixFor(weights);
-  const weighted_evaluation_matrix = weightedEvaluationMatrix(quality_matrix, weight_matrix);
-  const requirementQualityScores = requirements.map((req, index) => {
-    const qualityScore = requirementQualityScore(
-      weighted_evaluation_matrix[index] ?? [],
-      weight_matrix[index] ?? []
-    );
-    const vector = scores.get(req.id);
-    if (vector) vector.quality_score = qualityScore;
-    return qualityScore;
-  });
-  const n = requirementQualityScores.length;
-  const systemMaturityIndex =
-    n === 0
-      ? 0
-      : Math.round((requirementQualityScores.reduce((sum, score) => sum + score, 0) / n) * 100) / 100;
-
+  const n = maturities.length;
+  const meanMaturity = n === 0 ? 0 : maturities.reduce((sum, value) => sum + value, 0) / n;
+  const consistency = scoreSetConsistency(requirements, setLevelFindings);
+  const capped = consistency === 0 ? 0 : consistency === 1 ? Math.min(meanMaturity, 0.5) : meanMaturity;
   const document: DocumentMaturity = {
-    weighted_feasibility: columnMeanFromProduct(weighted_evaluation_matrix, weight_matrix, FEASIBLE_COLUMN),
-    weighted_verifiability: columnMeanFromProduct(weighted_evaluation_matrix, weight_matrix, VERIFIABLE_COLUMN),
+    consistency,
+    mean_maturity: Math.round(meanMaturity * 10000) / 10000,
+    system_maturity_index: Math.round(capped * 10000) / 100,
     safety_critical_weight: omega,
-    safety_critical_count: requirements.filter((r) => isSafetyCritical(r)).length,
-    system_maturity_index: systemMaturityIndex,
-    defect_profile: defectProfile(quality_matrix),
+    safety_critical_count: requirements.filter((req) => isSafetyCritical(req)).length,
   };
 
-  return { scores, document, quality_matrix, weight_matrix, weighted_evaluation_matrix };
+  return { scores, document, quality_matrix };
 }
 

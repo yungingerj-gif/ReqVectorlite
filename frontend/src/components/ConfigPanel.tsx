@@ -4,7 +4,7 @@ import { useAnalysisStore } from "../store/useAnalysisStore";
 const OVERRIDE_KEY = "layered-config-override-v1";
 
 const BLOCK_LABELS: Record<string, string> = {
-  "deterministic.unambiguous": "Unambiguous",
+  "deterministic.unambiguous": "Ambiguous",
   "deterministic.complete": "Complete",
   "deterministic.verifiable": "Verifiable (legacy id)",
   "verification.analysis": "Verification analysis",

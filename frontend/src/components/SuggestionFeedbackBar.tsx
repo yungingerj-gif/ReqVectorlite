@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { checkRewriteAdvances } from "../api/layeredApi";
 import { useAnalysisStore } from "../store/useAnalysisStore";
 import { suggestionFeedbackCompositeKey } from "../types/suggestionFeedback";
 
@@ -23,10 +24,13 @@ export function SuggestionFeedbackBar({
   const acceptRewrite = useAnalysisStore((s) => s.acceptRewrite);
   const clearAcceptedRewrite = useAnalysisStore((s) => s.clearAcceptedRewrite);
   const acceptedRewrites = useAnalysisStore((s) => s.acceptedRewrites);
+  const analysisResult = useAnalysisStore((s) => s.analysisResult);
 
   const origTrim = originalSuggestion.trim();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(origTrim);
+  const [checking, setChecking] = useState(false);
+  const [gateNote, setGateNote] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(origTrim);
@@ -52,10 +56,38 @@ export function SuggestionFeedbackBar({
     });
   };
 
-  const handleAcceptOriginal = () => {
+  const keepIfAdvances = async (text: string, verdict: "accepted" | "edited") => {
     if (!feedbackRunId) return;
-    record("accepted", origTrim);
-    acceptRewrite(requirementId, origTrim);
+    const current =
+      analysisResult?.requirements.find((row) => row.requirement.id === requirementId)?.requirement.source_text ??
+      "";
+    if (!current.trim()) {
+      setGateNote("Run analysis before accepting a rewrite.");
+      return;
+    }
+    const peerTexts = (analysisResult?.requirements ?? [])
+      .filter((row) => row.requirement.id !== requirementId)
+      .map((row) => row.requirement.source_text);
+    setChecking(true);
+    setGateNote(null);
+    try {
+      const check = await checkRewriteAdvances({ currentText: current, candidateText: text, peerTexts });
+      if (!check.advances) {
+        setGateNote(check.reason);
+        return;
+      }
+      record(verdict, text);
+      acceptRewrite(requirementId, text);
+      setEditing(false);
+    } catch (error) {
+      setGateNote(error instanceof Error ? error.message : "Could not check the rewrite.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleAcceptOriginal = () => {
+    void keepIfAdvances(origTrim, "accepted");
   };
 
   const handleReject = () => {
@@ -66,12 +98,9 @@ export function SuggestionFeedbackBar({
   };
 
   const handleApplyEdit = () => {
-    if (!feedbackRunId) return;
     const ft = draft.trim();
     if (!ft) return;
-    record("edited", ft);
-    acceptRewrite(requirementId, ft);
-    setEditing(false);
+    void keepIfAdvances(ft, "edited");
   };
 
   const btnClass = compact ? "secondary-btn small" : "secondary-btn";
@@ -83,7 +112,7 @@ export function SuggestionFeedbackBar({
         <button
           type="button"
           className={btnClass}
-          disabled={!feedbackRunId || editing}
+          disabled={!feedbackRunId || editing || checking}
           onClick={handleAcceptOriginal}
           title="Record acceptance and use this text for revised-source export"
         >
@@ -130,7 +159,7 @@ export function SuggestionFeedbackBar({
           <button
             type="button"
             className="primary small"
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || checking}
             onClick={handleApplyEdit}
           >
             Apply edited suggestion for export
@@ -149,6 +178,11 @@ export function SuggestionFeedbackBar({
             ) : null}
           </p>
         </>
+      )}
+      {gateNote && (
+        <p className="lv-suggestion-feedback-warn" role="status">
+          {gateNote}
+        </p>
       )}
       {!feedbackRunId && (
         <p className="lv-suggestion-feedback-warn">Run analysis to enable feedback capture.</p>

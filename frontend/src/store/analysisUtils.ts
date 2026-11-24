@@ -17,13 +17,11 @@ export type TableSortColumn =
   | "text"
   | "type"
   | "unambiguous"
-  | "complete"
+  | "feasible"
   | "verifiable"
   | "singular"
-  | "feasible"
-  | "consistent"
   | "maturity"
-  | "qualityScore"
+  | "stage"
   | "topIssue";
 
 export function severityRank(s: StructuredFinding["severity"]): number {
@@ -37,7 +35,8 @@ export function topFinding(findings: StructuredFinding[]): StructuredFinding | n
   return [...findings].sort((a, b) => severityRank(a.severity) - severityRank(b.severity))[0] ?? null;
 }
 
-export function scoreBadgeClass(score: number): "score-high" | "score-mid" | "score-low" {
+export function scoreBadgeClass(score: number | null): "score-high" | "score-mid" | "score-low" | "score-withheld" {
+  if (score == null) return "score-withheld";
   if (score >= 2) return "score-high";
   if (score >= 1) return "score-mid";
   return "score-low";
@@ -88,26 +87,20 @@ export function sortRequirementRows(
       case "unambiguous":
         cmp = a.scores.unambiguous - b.scores.unambiguous;
         break;
-      case "complete":
-        cmp = a.scores.complete - b.scores.complete;
+      case "feasible":
+        cmp = (a.scores.feasible ?? -1) - (b.scores.feasible ?? -1);
         break;
       case "verifiable":
-        cmp = a.scores.verifiable - b.scores.verifiable;
+        cmp = (a.scores.verifiable ?? -1) - (b.scores.verifiable ?? -1);
         break;
       case "singular":
-        cmp = a.scores.singular - b.scores.singular;
-        break;
-      case "feasible":
-        cmp = a.scores.feasible - b.scores.feasible;
-        break;
-      case "consistent":
-        cmp = a.scores.consistent - b.scores.consistent;
+        cmp = (a.scores.singular ?? -1) - (b.scores.singular ?? -1);
         break;
       case "maturity":
         cmp = a.scores.maturity - b.scores.maturity;
         break;
-      case "qualityScore":
-        cmp = (a.scores.quality_score ?? 0) - (b.scores.quality_score ?? 0);
+      case "stage":
+        cmp = a.scores.stage.localeCompare(b.scores.stage);
         break;
       case "topIssue": {
         const fa = tf(a.findings);
