@@ -151,32 +151,27 @@ export function RequirementDetail() {
         );
       })()}
 
-      <h3 className="lv-h3">Quality score</h3>
+      <h3 className="lv-h3">Gate maturity</h3>
       <p className="lv-muted">
-        {typeof scores.quality_score === "number" ? `${scores.quality_score}%` : "—"} of the maximum weighted row.
-        Each raw cell tops out at 2, so the percentage is the row sum of Q divided by 2 times the row sum of W.
+        Stopped at {scores.stage}. Maturity is {scores.quality_score}% of the four gates. A later gate stays blank until
+        every earlier gate is 2.
       </p>
       <h3 className="lv-h3">Quality vector</h3>
       {scores.safety_critical ? (
-        <p className="lv-muted">
-          Safety-critical. Feasibility and verifiability use weight {scores.weight} in the document rollup. The cells stay
-          0, 1, or 2.
-        </p>
+        <p className="lv-muted">This requirement is marked safety-critical. The gate scores themselves stay 0, 1, or 2.</p>
       ) : null}
       <div className="lv-score-grid">
         {(
           [
-            ["Necessary", scores.necessary],
-            ["Unambiguous", scores.unambiguous],
-            ["Complete", scores.complete],
+            ["Ambiguous", scores.unambiguous],
             ["Feasible", scores.feasible],
             ["Verifiable", scores.verifiable],
-            ["Maturity", scores.maturity],
+            ["Singular", scores.singular],
           ] as const
         ).map(([label, val]) => (
           <div key={label} className="lv-score-cell">
             <span className="lv-score-label">{label}</span>
-            <span className={`lv-score-badge lg ${scoreBadgeClass(val)}`}>{val}</span>
+            <span className={`lv-score-badge lg ${scoreBadgeClass(val)}`}>{val ?? "—"}</span>
           </div>
         ))}
       </div>

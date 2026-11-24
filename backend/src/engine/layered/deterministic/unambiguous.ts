@@ -14,7 +14,7 @@
  * single-word vague terms and weak modals are whole-word so "may" does not
  * hit "maybe" incorrectly beyond `\b` (and "information" is not "or").
  *
- * Findings use attribute `"Unambiguous"`.
+ * Findings use attribute `"Ambiguous"`. A score below 2 means the statement is ambiguous.
  */
 import type { CanonicalRequirement, StructuredFinding } from "../types";
 import { createFinding } from "./newFinding";
@@ -72,7 +72,7 @@ export function runUnambiguous(
       createFinding({
         requirement_id: req.id,
         block_id: BLOCK_ID,
-        attribute: "Unambiguous",
+        attribute: "Ambiguous",
         severity: "high",
         confidence: 0.92,
         issue_type: "vague_or_subjective_language",
@@ -93,7 +93,7 @@ export function runUnambiguous(
       createFinding({
         requirement_id: req.id,
         block_id: BLOCK_ID,
-        attribute: "Unambiguous",
+        attribute: "Ambiguous",
         severity: "medium",
         confidence: 0.85,
         issue_type: "weak_modal",

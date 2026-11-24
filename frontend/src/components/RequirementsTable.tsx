@@ -64,13 +64,12 @@ export function RequirementsTable() {
               {header("id", "ID")}
               {header("text", "Requirement text")}
               {header("type", "Type")}
-              {header("necessary", "Necessary")}
-              {header("unambiguous", "Unambiguous")}
-              {header("complete", "Complete")}
+              {header("unambiguous", "Ambiguous")}
               {header("feasible", "Feasible")}
               {header("verifiable", "Verifiable")}
+              {header("singular", "Singular")}
               {header("maturity", "Maturity")}
-              {header("qualityScore", "Quality %")}
+              {header("stage", "Stage")}
               {header("topIssue", "Top issue")}
             </tr>
           </thead>
@@ -100,28 +99,27 @@ export function RequirementsTable() {
                   <td className="lv-td-text">{r.source_text}</td>
                   <td>{r.type}</td>
                   <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.necessary)}`}>{scores.necessary}</span>
-                  </td>
-                  <td>
                     <span className={`lv-score-badge ${scoreBadgeClass(scores.unambiguous)}`}>
                       {scores.unambiguous}
                     </span>
                   </td>
                   <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.complete)}`}>{scores.complete}</span>
-                  </td>
-                  <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.feasible)}`}>{scores.feasible}</span>
-                  </td>
-                  <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.verifiable)}`}>
-                      {scores.verifiable}
+                    <span className={`lv-score-badge ${scoreBadgeClass(scores.feasible)}`}>
+                      {scores.feasible ?? "—"}
                     </span>
                   </td>
                   <td>
-                    <span className={`lv-score-badge ${scoreBadgeClass(scores.maturity)}`}>{scores.maturity}</span>
+                    <span className={`lv-score-badge ${scoreBadgeClass(scores.verifiable)}`}>
+                      {scores.verifiable ?? "—"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`lv-score-badge ${scoreBadgeClass(scores.singular)}`}>
+                      {scores.singular ?? "—"}
+                    </span>
                   </td>
                   <td>{typeof scores.quality_score === "number" ? `${scores.quality_score}%` : "—"}</td>
+                  <td>{scores.stage}</td>
                   <td className="lv-td-issue">
                     {tf ? (
                       <>

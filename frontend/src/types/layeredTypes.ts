@@ -72,33 +72,32 @@ export interface StructuredFinding {
 
 export type QualityScore = 0 | 1 | 2;
 
+export type GatedScore = QualityScore | null;
+
+export type GateStage = "ambiguous" | "feasible" | "verifiable" | "singular" | "done";
+
 export interface QualityVector {
-  necessary: QualityScore;
   unambiguous: QualityScore;
-  complete: QualityScore;
-  feasible: QualityScore;
-  verifiable: QualityScore;
-  maturity: QualityScore;
-  /** q_i, 0–100. Row sum of Q divided by the maximum weighted row. */
+  feasible: GatedScore;
+  verifiable: GatedScore;
+  singular: GatedScore;
+  stage: GateStage;
+  /** Leading full passes divided by 4. Range 0–1. */
+  maturity: number;
+  /** Maturity as a percentage. Range 0–100. */
   quality_score: number;
   safety_critical: boolean;
   weight: number;
 }
 
 export interface DocumentMaturity {
-  completeness: QualityScore;
   consistency: QualityScore;
-  bounded: QualityScore;
-  feasible: QualityScore;
-  maturity: QualityScore;
-  weighted_feasibility: number;
-  weighted_verifiability: number;
+  /** Average row maturity, 0–1. */
+  mean_maturity: number;
+  /** Capped mean maturity, as a percentage. */
+  system_maturity_index: number;
   safety_critical_weight: number;
   safety_critical_count: number;
-  /** M_sys, mean of q_i, 0–100. */
-  system_maturity_index: number;
-  /** Column means of R. Order: necessary, unambiguous, complete, feasible, verifiable. */
-  defect_profile: number[];
 }
 
 export interface LegacyReconstructionResult {
@@ -143,9 +142,7 @@ export interface LayeredAnalysisResult {
   };
   requirements: PerRequirementResult[];
   set_level_findings: StructuredFinding[];
-  quality_matrix: number[][];
-  weight_matrix: number[][];
-  weighted_evaluation_matrix: number[][];
+  quality_matrix: (number | null)[][];
   document_maturity: DocumentMaturity;
   parent_requirements?: CanonicalRequirement[];
 }
